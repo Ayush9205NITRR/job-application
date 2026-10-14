@@ -72,6 +72,7 @@ def normalise(item: dict) -> dict:
         "headcount": pick(item, "companyEmployeesCount", "employeeCount", "companySize", "companyStaffCount"),
         "industry": pick(item, "industries", "industry", "companyIndustry", default=""),
         "description": pick(item, "descriptionText", "description", "jobDescription", default=""),
+        "about": pick(item, "companyDescription", default=""),
     }
 
 
@@ -149,7 +150,7 @@ def main():
             row["Headcount"] = str(j["headcount"])
         if url in decisions:
             row.update(decisions[url])
-            row["About"] = (j["description"] or "")[:1000]
+            row["About"] = (j["about"] or j["description"] or "")[:1000]
         # Never regress a company that has moved past classification.
         row = {k: v for k, v in row.items() if v not in (None, "")}
         if existing.get(url, {}).get("Status") in rules.ADVANCED:
