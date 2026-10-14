@@ -1,0 +1,20 @@
+{
+  "_note": "Copy to profile.json (gitignored). Never add health information.",
+  "name": "Ayush Tiwari",
+  "phone": "",
+  "email": "ayushtiwari9205@gmail.com",
+  "linkedin": "",
+  "github": "",
+  "location": "Gurugram, open to remote",
+  "education": [{"school": "", "degree": "", "years": ""}],
+  "experience": [
+    {"company": "Enout", "title": "", "start": "", "end": "", "summary": "Built BD desk from zero to a 40 Cr GMV quarter"},
+    {"company": "AlgoUniversity", "title": "", "start": "", "end": "", "summary": "Scaled 9 Cr"}
+  ],
+  "skills": ["B2B sales", "Business development", "Outbound", "Sales operations", "Hiring"],
+  "answers": {
+    "notice_period": "Last working day 1 Jan 2027",
+    "location": "Gurugram, open to remote",
+    "work_authorization": "Authorized to work in India"
+  }
+}
