@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 10
     env:
       AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
-      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID || 'app40Dtij4xm0M2aW' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

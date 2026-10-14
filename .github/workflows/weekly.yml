@@ -21,7 +21,7 @@ jobs:
     env:
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
       AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
-      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID || 'app40Dtij4xm0M2aW' }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       APOLLO_API_KEY: ${{ secrets.APOLLO_API_KEY }}
       # Scheduled runs are real; manual runs default to dry-run unless unticked.
