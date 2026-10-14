@@ -77,7 +77,12 @@ def main():
             "proofLine": T.PROOFS[proof_id],
         }
         if tpl == "A":
-            line = (c.get("First line") or llm.first_line(co["Company"], co.get("About", ""), job["Title"])).strip()
+            line = (c.get("First line") or "").strip()
+            if not line and llm.available():
+                line = llm.first_line(co["Company"], co.get("About", ""), job["Title"]).strip()
+            if not line:
+                print(f"skip {c['Email']}: no First line yet (fill it in Airtable, or ask Claude to write it)")
+                continue
             problem = rules.check_first_line(line)
             if problem:
                 print(f"skip {c['Email']}: first line rejected ({problem}): {line!r}")

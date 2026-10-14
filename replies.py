@@ -44,9 +44,15 @@ def main():
             received = m["at"].isoformat()
             co = companies.get(at.first_link(c, "Company"), {})
             job = next((j for j in jobs if co.get("_id") in (j.get("Company LinkedIn URL") or []) and j.get("Applied")), {})
-            res = llm.classify_reply(m["body"], job.get("Title", "the role"), co.get("Company", ""))
-            at.Replies.create([{"Contact": [cid], "Received at": received, "Body": m["body"][:5000],
-                                "Class": res["class"], "Suggested response": res["suggested_response"]}])
+            if llm.available():
+                res = llm.classify_reply(m["body"], job.get("Title", "the role"), co.get("Company", ""))
+            else:  # logged unclassified; Claude classifies via Airtable MCP
+                res = {"class": None, "suggested_response": ""}
+            row = {"Contact": [cid], "Received at": received, "Body": m["body"][:5000],
+                   "Suggested response": res["suggested_response"]}
+            if res["class"]:
+                row["Class"] = res["class"]
+            at.Replies.create([row])
             stage = "Do not contact" if res["class"] == "Unsubscribe" else "Replied"
             at.Contacts.update([(cid, {"Stage": stage})])
             if co and stage == "Replied":

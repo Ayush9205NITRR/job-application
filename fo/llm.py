@@ -5,6 +5,10 @@ from .config import env
 from .http import request
 
 
+def available() -> bool:
+    return bool(env("GEMINI_API_KEY", required=False))
+
+
 def gemini_json(prompt: str) -> object:
     model = env("GEMINI_MODEL", "gemini-2.5-flash", required=False)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"

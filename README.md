@@ -44,3 +44,11 @@ template variables abort the draft. Tests: `pytest`.
 
 ## Not built yet
 Chrome autofill extension (spec step 6). Use Simplify with `profile.json` as the reference until then.
+
+## Running without Gemini / Apollo
+- No `GEMINI_API_KEY`: `pipeline.py` still scrapes, dedupes and applies hard excludes. New companies land as
+  **Needs review** with no score. Ask Claude (Airtable MCP) to score them with the section 7 rubric and set
+  `ICP score`, `ICP reason` and `Status`. `draft.py` skips contacts with an empty `First line` until it is filled.
+  `replies.py` logs replies unclassified for Claude to classify.
+- No `APOLLO_API_KEY`: the Actions workflow skips `enrich.py`. Add Contacts by hand (Email, First name, Company
+  link, Email status = verified, Contact type, Stage = New) and `draft.py` takes it from there.

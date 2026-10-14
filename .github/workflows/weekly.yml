@@ -36,4 +36,6 @@ jobs:
       - run: pip install requests python-dotenv pytest
       - run: python -m pytest -q
       - run: python pipeline.py $FLAGS
-      - run: python enrich.py $FLAGS
+      - name: Enrich (skipped until APOLLO_API_KEY secret exists)
+        if: env.APOLLO_API_KEY != ''
+        run: python enrich.py $FLAGS

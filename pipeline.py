@@ -70,6 +70,10 @@ def classify_new(companies: dict[str, list[dict]]) -> dict[str, dict]:
             result[url] = {"ICP score": 0, "ICP reason": f"Hard exclude: {reason}", "Status": "Excluded"}
         else:
             to_score.append(url)
+    if not llm.available():  # no Gemini key: Claude (via Airtable MCP) or Ayush scores these by hand
+        for u in to_score:
+            result[u] = {"Status": "Needs review", "ICP reason": "Awaiting manual scoring (no GEMINI_API_KEY)"}
+        to_score = []
     for i in range(0, len(to_score), 20):  # batches of 20
         chunk = to_score[i : i + 20]
         batch = [
@@ -116,7 +120,9 @@ def main():
     print(f"{len(companies)} unique companies ({len(jobs) - sum(map(len, companies.values()))} jobs dropped: no company URL / duplicate)")
 
     existing = {c.get("Company LinkedIn URL"): c for c in at.Companies.all()}
-    new_urls = {u: j for u, j in companies.items() if existing.get(u, {}).get("ICP score") is None}
+    # Without Gemini, only brand-new companies get a placeholder; never overwrite a status set by hand.
+    new_urls = {u: j for u, j in companies.items()
+                if u not in existing or (llm.available() and existing[u].get("ICP score") is None)}
     decisions = classify_new(new_urls)
 
     today = date.today().isoformat()
