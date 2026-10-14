@@ -108,3 +108,9 @@ def test_all_copy_free_of_dashes_and_health():
     texts = list(T.PROOFS.values()) + list(T.SUBJECTS.values()) + list(T.BODIES.values())
     for t in texts:
         assert "—" not in t and not rules.has_health_terms(t)
+
+
+def test_linkedin_invites_fit_300_chars_for_all_proofs():
+    for pid, proof in T.PROOFS.items():
+        v = {"firstName": "Priyanka", "companyName": "Acme Logistics Technologies", "roleTitle": "Founder's Office Associate", "proofLine": proof}
+        assert len(T.render(T.LINKEDIN_INVITE, v)) <= 300, pid

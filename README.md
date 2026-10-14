@@ -9,7 +9,7 @@ drafts, and track everything in Airtable. **Nothing is sent or submitted by code
    accounts, not Enout's.
 2. Gmail: Google Cloud project, enable Gmail API, create an OAuth *Desktop* client, save it as `credentials.json`.
    First run opens a browser to authorise (`gmail.compose` + `gmail.readonly`).
-3. Airtable base with the six tables from the spec. Primary field of **Companies must be `Company LinkedIn URL`**.
+3. Airtable: create an empty base, put its id in `.env`, then `python setup_airtable.py` (PAT needs `schema.bases:write`) creates all six tables, fields and links. Notes on what it creates: Primary field of **Companies must be `Company LinkedIn URL`**.
    Two small additions to the spec schema: Companies gets `About` (long text), Contacts gets optional `First line`
    (long text). Link fields: Jobs.`Company LinkedIn URL` -> Companies, Contacts.`Company` -> Companies,
    Touches.`Contact` and Replies.`Contact` -> Contacts. Date fields (`Drafted at`, `Sent at`, `Received at`,
@@ -26,6 +26,7 @@ drafts, and track everything in Airtable. **Nothing is sent or submitted by code
 | send by hand | 9 to 11 AM IST | review drafts, send |
 | `python followup.py` | daily | marks sent touches, drafts day 5 / day 12 in-thread, stops on reply |
 | `python replies.py` | daily | logs replies, flags bounces, classifies, drafts a response |
+| `python linkedin.py` | daily | manual queue: up to 15 invites + day-8 messages, with text to paste; `--log` after sending |
 
 All scripts take `--dry-run`. Try `python draft.py --dry-run` first to read the rendered emails.
 
