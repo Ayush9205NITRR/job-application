@@ -1,0 +1,39 @@
+name: Weekly scrape and enrich
+
+# Stages 1-4 only (scrape, score, enrich). They write to Airtable and send nothing.
+# Gmail stages (draft, followup, replies) need browser OAuth and stay on your laptop.
+on:
+  schedule:
+    - cron: "30 3 * * 1" # Mondays 09:00 IST
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no Airtable writes)"
+        type: boolean
+        default: true
+
+concurrency: weekly-pipeline
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      APOLLO_API_KEY: ${{ secrets.APOLLO_API_KEY }}
+      # Scheduled runs are real; manual runs default to dry-run unless unticked.
+      FLAGS: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: pip install requests python-dotenv pytest
+      - run: python -m pytest -q
+      - run: python pipeline.py $FLAGS
+      - run: python enrich.py $FLAGS
