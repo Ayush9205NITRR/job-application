@@ -1,4 +1,5 @@
 """Thin Airtable REST client. Records come back flat: {"_id": "rec...", **fields}."""
+import re
 import time
 from urllib.parse import quote
 
@@ -7,6 +8,13 @@ from .http import request
 
 DRY_RUN = False
 _API = "https://api.airtable.com/v0"
+
+
+def base_id() -> str:
+    """AIRTABLE_BASE_ID, tolerating a pasted URL or stray whitespace: extracts the app... id."""
+    raw = env("AIRTABLE_BASE_ID")
+    m = re.search(r"app[A-Za-z0-9]{14}", raw)
+    return m.group(0) if m else raw.strip()
 
 
 def _headers():
@@ -24,7 +32,7 @@ class Table:
 
     @property
     def url(self):
-        return f"{_API}/{env('AIRTABLE_BASE_ID')}/{quote(self.name)}"
+        return f"{_API}/{base_id()}/{quote(self.name)}"
 
     def all(self, formula: str | None = None) -> list[dict]:
         out, offset = [], None

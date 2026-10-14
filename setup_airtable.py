@@ -7,8 +7,7 @@ Needs a PAT with scopes: schema.bases:read, schema.bases:write (plus data scopes
 """
 import argparse
 
-from fo.airtable import _headers
-from fo.config import env
+from fo.airtable import _headers, base_id
 from fo.http import request
 
 T = lambda n: {"name": n, "type": "singleLineText"}
@@ -57,7 +56,7 @@ SCHEMA = {
 
 
 def meta_url(*parts):
-    return "/".join(["https://api.airtable.com/v0/meta/bases", env("AIRTABLE_BASE_ID"), *parts])
+    return "/".join(["https://api.airtable.com/v0/meta/bases", base_id(), *parts])
 
 
 def main():
