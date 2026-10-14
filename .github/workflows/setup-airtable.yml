@@ -1,0 +1,26 @@
+name: Setup Airtable schema
+
+# One-off, manual. Creates the six tables/fields/links in the base from the AIRTABLE_BASE_ID secret.
+# Safe to re-run: only adds what is missing. PAT needs schema.bases:read and schema.bases:write.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (list what would be created)"
+        type: boolean
+        default: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - run: python setup_airtable.py ${{ inputs.dry_run && '--dry-run' || '' }}
