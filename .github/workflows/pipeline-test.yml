@@ -1,0 +1,35 @@
+name: Pipeline test run
+
+# Manual. Runs pipeline.py once and uploads the raw Apify output as an artifact so field names can be checked.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no Airtable writes)"
+        type: boolean
+        default: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID || 'app40Dtij4xm0M2aW' }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - run: python pipeline.py --dump data/raw.json ${{ inputs.dry_run && '--dry-run' || '' }}
+      - name: Show field names of first item
+        if: always()
+        run: python -c "import json;d=json.load(open('data/raw.json'));print(len(d),'items');print(sorted(d[0]) if d else 'EMPTY')"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: raw-apify
+          path: data/raw.json
