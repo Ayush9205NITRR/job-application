@@ -21,7 +21,7 @@ DEFAULT_INPUT = {
     "queries": ["Founder's Office", "Founders Office", "Chief of Staff to CEO", "Founder Office Associate"],
     "location": "India",
     "maxItems": 300,
-    "datePosted": "week",
+    "datePosted": "pastWeek",
 }
 
 
