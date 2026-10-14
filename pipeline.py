@@ -15,22 +15,37 @@ from fo import llm, rules
 from fo.config import ROOT, env
 from fo.http import request
 
-# Edit apify_input.json to change keywords/location. Input names depend on the actor's schema:
-# check https://apify.com/meka.im/linkedin-jobs-scraper/input-schema on the first run.
+# Input names follow the actor's published schema (keywords, location, datePosted, limitPerSource,
+# scrapeCompany). The actor takes ONE keyword string per run, so "keywords" here may be a list and we run each.
+# Override any of this with apify_input.json in the repo root.
 DEFAULT_INPUT = {
-    "queries": ["Founder's Office", "Founders Office", "Chief of Staff to CEO", "Founder Office Associate"],
+    "keywords": ["Founder's Office", "Founders Office", "Chief of Staff"],
     "location": "India",
-    "maxItems": 300,
     "datePosted": "pastWeek",
+    "limitPerSource": 100,
+    "scrapeCompany": True,
 }
 
 
 def scrape() -> list[dict]:
     inp_file = ROOT / "apify_input.json"
-    inp = json.loads(inp_file.read_text()) if inp_file.exists() else DEFAULT_INPUT
+    inp = dict(json.loads(inp_file.read_text()) if inp_file.exists() else DEFAULT_INPUT)
+    kws = inp.pop("keywords")
+    kws = [kws] if isinstance(kws, str) else kws
     actor = env("APIFY_ACTOR", "meka.im~linkedin-jobs-scraper", required=False)
     url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
-    return request("POST", url, params={"token": env("APIFY_TOKEN")}, json=inp, timeout=900).json()
+    items, errors = [], []
+    for kw in kws:
+        try:
+            got = request("POST", url, params={"token": env("APIFY_TOKEN")}, json={**inp, "keywords": kw}, timeout=900).json()
+            print(f"  {kw!r}: {len(got)} jobs")
+            items += got
+        except RuntimeError as e:
+            print(f"  {kw!r}: FAILED {e}")
+            errors.append(e)
+    if errors and not items:
+        raise SystemExit("every scrape run failed")
+    return items
 
 
 def pick(item: dict, *keys, default=None):
