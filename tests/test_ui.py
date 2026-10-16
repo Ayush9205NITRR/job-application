@@ -140,3 +140,13 @@ def test_edits_blocked_while_job_running(srv):
         assert ob.load_queue()[0]["approved"] == ""
     finally:
         ui.JOB["running"] = False
+
+
+def test_allowed_host_rules():
+    env = {"CODESPACE_NAME": "ayush-abc123", "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN": "app.github.dev"}
+    assert ui.allowed_host("127.0.0.1:8765", {}, 8765) and ui.allowed_host("localhost", {}, 8765)
+    assert ui.allowed_host("ayush-abc123-8765.app.github.dev", env, 8765)
+    assert not ui.allowed_host("ayush-abc123-8765.app.github.dev", {}, 8765)        # not in a codespace
+    assert not ui.allowed_host("other-xyz-8765.app.github.dev", env, 8765)          # someone else's codespace
+    assert not ui.allowed_host("ayush-abc123-9999.app.github.dev", env, 8765)       # wrong port
+    assert not ui.allowed_host("evil.example.com", env, 8765)

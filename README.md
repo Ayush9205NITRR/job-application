@@ -18,6 +18,12 @@ Upload the Apollo CSV, relevant rows are drafted automatically, edit the opening
 "Send approved + follow-ups". Local only (127.0.0.1), the upload is deleted after reading, nothing sends without
 approval. Do not run the UI and the cron `cycle` at the same moment (both write queue.csv).
 
+### UI in GitHub Codespaces (no install on your laptop)
+1. github.com/settings/codespaces -> New secret: `GMAIL_USER` and `GMAIL_APP_PASSWORD`, repository access: this repo.
+2. Repo page -> Code -> Codespaces -> Create codespace on branch `claude/confident-knuth-cdvylw`.
+3. The UI starts by itself and opens in a browser tab (private port, only you can open it). If not: Ports tab -> 8765.
+`queue.csv` lives inside the codespace (gitignored). The codespace sleeps after idle, files stay until you delete it.
+
 ## Daily loop
 `python outbound.py cycle` = inbox + send + followup + notify. Run it at 9 AM and 5 PM IST on any always-on machine:
 ```

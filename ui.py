@@ -53,6 +53,16 @@ def state_label(r):
     return "approved, waiting for next send" if r["approved"] == "y" else "needs review"
 
 
+def allowed_host(host_header, environ, port):
+    """Only localhost, plus this exact Codespaces forwarded address when running inside a Codespace.
+    Anything else (DNS rebinding, other sites) is refused."""
+    host = host_header.split(":")[0].lower()
+    if host in ("127.0.0.1", "localhost"):
+        return True
+    name, domain = environ.get("CODESPACE_NAME"), environ.get("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN")
+    return bool(name and domain and host == f"{name}-{port}.{domain}".lower())
+
+
 def parse_multipart(content_type, body):
     """-> {field: (filename|None, bytes)} using the stdlib email parser (cgi is gone in new Pythons)."""
     msg = message_from_bytes(b"Content-Type: " + content_type.encode() + b"\r\n\r\n" + body, policy=email_policy)
@@ -174,8 +184,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def _ok_host(self):
-        host = (self.headers.get("Host") or "").split(":")[0]
-        return host in ("127.0.0.1", "localhost")  # blocks DNS-rebinding style access
+        return allowed_host(self.headers.get("Host") or "", os.environ, self.server.server_address[1])
 
     def _send(self, code, body="", ctype="text/html; charset=utf-8", location=None):
         data = body.encode()
