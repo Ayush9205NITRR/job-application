@@ -62,6 +62,24 @@ EXCLUDE = re.compile(r"\bMICE\b|event (management|planning|company|agency)|event
                      r"staffing|recruit(ment|ing|er)s?\b|manpower|headhunt|executive search|placement", re.I)
 
 
+# ---- .env (stdlib): KEY=VALUE lines. Real environment variables win over the file. ------------------
+def load_dotenv(path=None):
+    path = Path(path or os.environ.get("OUTBOUND_ENV") or Path(__file__).resolve().parent / ".env")
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k, v = k.strip().removeprefix("export ").strip(), v.strip().strip("\"'")
+        if k and k not in os.environ:
+            os.environ[k] = v
+
+
+load_dotenv()
+
+
 # ---- Small helpers ---------------------------------------------------------
 def now_utc():
     return datetime.now(timezone.utc)
@@ -232,6 +250,14 @@ def imap_connect():
     m = imaplib.IMAP4_SSL("imap.gmail.com")
     m.login(u, p)
     return m
+
+
+def cmd_check():
+    """Log in to SMTP and IMAP without sending anything."""
+    u, _ = creds()
+    smtp_connect().quit()
+    imap_connect().logout()
+    log(f"OK: SMTP and IMAP login work for {u}")
 
 
 def make_message(r, step):
@@ -564,11 +590,14 @@ def main(argv=None):
     for name in ("send", "followup", "notify", "inbox", "cycle"):
         sub.add_parser(name).add_argument("--dry", action="store_true")
     sub.add_parser("wa")
+    sub.add_parser("check")
     a = ap.parse_args(argv)
     if a.cmd == "draft":
         draft(a.csv)
     elif a.cmd == "wa":
         cmd_wa()
+    elif a.cmd == "check":
+        cmd_check()
     else:
         {"send": cmd_send, "followup": cmd_followup, "notify": cmd_notify, "inbox": cmd_inbox, "cycle": cmd_cycle}[a.cmd](a.dry)
 

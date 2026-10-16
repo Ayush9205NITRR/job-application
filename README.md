@@ -5,7 +5,7 @@ Nothing is sent without `approved=y`. Plain text, no tracking, resume link only 
 
 ## Setup
 1. Gmail: enable IMAP, create an app password (needs 2-step verification).
-2. `export GMAIL_USER=you@gmail.com GMAIL_APP_PASSWORD=xxxx` (env only, never in the repo).
+2. `cp .env.example .env`, fill in `GMAIL_USER` and `GMAIL_APP_PASSWORD` (`.env` is gitignored; on Mac/Linux also `chmod 600 .env`). `outbound.py` and `ui.py` read it automatically. Then `python outbound.py check` tests the login without sending anything.
 3. Apollo: export People CSV (seed / pre-seed, 2 to 50 employees, Founder / Co-Founder / CEO).
 4. `python outbound.py draft apollo.csv`, then `python outbound.py cycle --dry` to read what would happen.
 

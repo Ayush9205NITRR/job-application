@@ -324,3 +324,30 @@ def test_inbox_detects_prospect_reply_and_bounce(monkeypatch):
     assert {n[0] for n in notices} == {"[Outbound] REPLY from P1 (Acme1)", "[Outbound] BOUNCE p2@acme2.com"}
     assert ob.due_followups(rows, NOW + timedelta(days=10)) == [(2, "fu1")]   # replied and bounced rows stop
     assert len(FakeSMTP.sent) == 2                                              # notices emailed to self
+
+
+def test_dotenv_loaded_but_real_env_wins(tmp_path, monkeypatch):
+    f = tmp_path / ".env"
+    f.write_text('# comment\nGMAIL_USER="me@gmail.com"\nexport GMAIL_APP_PASSWORD=abcd efgh\nEMPTY\nOTHER_X = 1\n')
+    monkeypatch.delenv("GMAIL_USER", raising=False)
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "from-real-env")
+    monkeypatch.delenv("OTHER_X", raising=False)
+    ob.load_dotenv(f)
+    import os
+    assert os.environ["GMAIL_USER"] == "me@gmail.com"            # quotes stripped
+    assert os.environ["GMAIL_APP_PASSWORD"] == "from-real-env"   # existing env not overridden
+    assert os.environ["OTHER_X"] == "1"
+    monkeypatch.delenv("OTHER_X")
+
+
+def test_check_logs_in_without_sending(monkeypatch, capsys):
+    monkeypatch.setattr(ob.imaplib, "IMAP4_SSL", lambda h: type("I", (FakeIMAP,), {"login": lambda s, *a: None})([]))
+    ob.cmd_check()
+    assert FakeSMTP.sent == [] and "OK: SMTP and IMAP login work" in capsys.readouterr().out
+
+
+def test_missing_credentials_message(monkeypatch):
+    monkeypatch.delenv("GMAIL_APP_PASSWORD")
+    with pytest.raises(SystemExit) as e:
+        ob.creds()
+    assert "GMAIL_APP_PASSWORD" in str(e.value)

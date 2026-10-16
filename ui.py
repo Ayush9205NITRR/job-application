@@ -113,7 +113,7 @@ def page(view="review", msg=""):
     rows = ob.load_queue()
     counts, today, cap, halted = stats(rows)
     running = JOB["running"]
-    creds_ok = bool(os.environ.get("GMAIL_USER") and os.environ.get("GMAIL_APP_PASSWORD"))
+    creds_ok = bool(os.environ.get("GMAIL_USER") and os.environ.get("GMAIL_APP_PASSWORD"))  # outbound loads .env at import
     h = [f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
          f"<title>Outbound</title>{'<meta http-equiv=refresh content=4>' if running else ''}<style>{CSS}</style><main>"
          f"<h1>Founder's Office outbound</h1><div class=row><span class=pill>sent today {today}/{cap}</span>"
@@ -123,7 +123,7 @@ def page(view="review", msg=""):
     if halted:
         h.append("<div class='card bad'><b>Sending is halted:</b> bounce rate is too high. Review rows marked bounced.</div>")
     if not creds_ok:
-        h.append("<div class='card warn'>GMAIL_USER / GMAIL_APP_PASSWORD are not set in this terminal. "
+        h.append("<div class='card warn'>GMAIL_USER / GMAIL_APP_PASSWORD are not set (put them in .env or export them). "
                  "You can upload and review, but sending and inbox checks will fail until you set them and restart.</div>")
     h.append(f"<div class=card><form method=post action=/upload enctype=multipart/form-data class=row>"
              f"<input type=hidden name=token value={TOKEN}><b>1. Apollo CSV</b>"
