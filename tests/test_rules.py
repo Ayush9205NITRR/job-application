@@ -114,3 +114,13 @@ def test_linkedin_invites_fit_300_chars_for_all_proofs():
     for pid, proof in T.PROOFS.items():
         v = {"firstName": "Priyanka", "companyName": "Acme Logistics Technologies", "roleTitle": "Founder's Office Associate", "proofLine": proof}
         assert len(T.render(T.LINKEDIN_INVITE, v)) <= 300, pid
+
+
+def test_translate_jobs_rewrites_company_links():
+    import copy_to_new_base as c
+    old_c = [{"_id": "recA", "Company LinkedIn URL": "https://www.linkedin.com/company/a"}]
+    old_j = [{"_id": "j1", "Job ID": "1", "Title": "FO", "Company LinkedIn URL": ["recA"], "Applied": False},
+             {"_id": "j2", "Job ID": "2", "Title": "X", "Company LinkedIn URL": ["recGone"]}]
+    rows, orphans = c.translate_jobs(old_j, old_c, {"https://www.linkedin.com/company/a": "recNEW"})
+    assert rows[0]["Company LinkedIn URL"] == ["recNEW"] and rows[0]["Job ID"] == "1" and "_id" not in rows[0]
+    assert "Company LinkedIn URL" not in rows[1] and orphans == 1

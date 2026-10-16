@@ -27,12 +27,12 @@ def _chunks(seq, n=10):
 
 
 class Table:
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self, name: str, base: str | None = None):
+        self.name, self.base = name, base  # base=None -> AIRTABLE_BASE_ID
 
     @property
     def url(self):
-        return f"{_API}/{base_id()}/{quote(self.name)}"
+        return f"{_API}/{self.base or base_id()}/{quote(self.name)}"
 
     def all(self, formula: str | None = None) -> list[dict]:
         out, offset = [], None

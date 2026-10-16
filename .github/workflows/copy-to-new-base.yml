@@ -1,0 +1,36 @@
+name: Copy companies and jobs to a new Airtable base
+
+# Manual. Reads the base in AIRTABLE_BASE_ID (never modifies it) and copies Companies + Jobs into a NEW base.
+on:
+  workflow_dispatch:
+    inputs:
+      workspace_id:
+        description: "Airtable workspace id (wsp...) to create the new base in"
+        type: string
+        default: ""
+      existing_base_id:
+        description: "Optional: copy into this base (app...) instead of creating one"
+        type: string
+        default: ""
+      dry_run:
+        description: "Dry run (count only, create nothing)"
+        type: boolean
+        default: true
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID || 'app40Dtij4xm0M2aW' }}
+      WORKSPACE_ID: ${{ inputs.workspace_id }}
+      EXISTING_BASE: ${{ inputs.existing_base_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - name: Copy
+        run: python copy_to_new_base.py ${{ inputs.dry_run && '--dry-run' || '' }} ${EXISTING_BASE:+--existing-base "$EXISTING_BASE"}
