@@ -1,54 +1,38 @@
-# Founder's Office outbound system
+# Founder's Office outbound
 
-Scrape Founder's Office jobs, score companies against an ICP, enrich decision makers, draft personalised Gmail
-drafts, and track everything in Airtable. **Nothing is sent or submitted by code.** Gmail output is drafts only
-(`fo/gmail.py` never calls send); Ayush reviews and sends by hand.
+Spec: `REQUIREMENTS.md` (current). One stdlib-only file, `outbound.py`; state in `queue.csv` (gitignored).
+Nothing is sent without `approved=y`. Plain text, no tracking, resume link only in the last note.
 
 ## Setup
-1. `pip install -r requirements.txt`, `cp .env.example .env`, fill in keys. Use **personal** Apollo and Airtable
-   accounts, not Enout's.
-2. Gmail: Google Cloud project, enable Gmail API, create an OAuth *Desktop* client, save it as `credentials.json`.
-   First run opens a browser to authorise (`gmail.compose` + `gmail.readonly`).
-3. Airtable: create an empty base, put its id in `.env`, then `python setup_airtable.py` (PAT needs `schema.bases:write`) creates all six tables, fields and links. Notes on what it creates: Primary field of **Companies must be `Company LinkedIn URL`**.
-   Two small additions to the spec schema: Companies gets `About` (long text), Contacts gets optional `First line`
-   (long text). Link fields: Jobs.`Company LinkedIn URL` -> Companies, Contacts.`Company` -> Companies,
-   Touches.`Contact` and Replies.`Contact` -> Contacts. Date fields (`Drafted at`, `Sent at`, `Received at`,
-   `Posted`) should be date with time. Single-select options are created automatically.
-4. Copy `profile.example.json` to `profile.json` (gitignored). No health information.
+1. Gmail: enable IMAP, create an app password (needs 2-step verification).
+2. `export GMAIL_USER=you@gmail.com GMAIL_APP_PASSWORD=xxxx` (env only, never in the repo).
+3. Apollo: export People CSV (seed / pre-seed, 2 to 50 employees, Founder / Co-Founder / CEO).
+4. `python outbound.py draft apollo.csv`, then `python outbound.py cycle --dry` to read what would happen.
 
-## Run order
-| Script | When | What |
-|---|---|---|
-| `python pipeline.py` | weekly | scrape, dedupe, hard excludes, Gemini score, upsert (>=60 = Shortlisted) |
-| `python enrich.py` | after pipeline | Apollo on Shortlisted only, verified emails only, + job poster |
-| apply by hand | | open job link, autofill, submit, tick **Applied** on the Job |
-| `python draft.py` | daily | Gmail drafts for new contacts (only where a job is ticked Applied) |
-| send by hand | 9 to 11 AM IST | review drafts, send |
-| `python followup.py` | daily | marks sent touches, drafts day 5 / day 12 in-thread, stops on reply |
-| `python replies.py` | daily | logs replies, flags bounces, classifies, drafts a response |
-| `python linkedin.py` | daily | manual queue: up to 15 invites + day-8 messages, with text to paste; `--log` after sending |
+## Daily loop
+`python outbound.py cycle` = inbox + send + followup + notify. Run it at 9 AM and 5 PM IST on any always-on machine:
+```
+30 3,11 * * *  cd /path/to/job-application && python3 outbound.py cycle >> outbound.log 2>&1
+```
+Reply to the `[Outbound] Action needed` digest with: `approve 1 3 5` | `approve all` | `line 2: your opening line` |
+`skip 4` | `replied 6`. Only replies from your own address that pass SPF/DKIM are obeyed, each once, and
+`approve all` covers only the rows listed in that digest.
 
-All scripts take `--dry-run`. Try `python draft.py --dry-run` first to read the rendered emails.
+## Rules enforced in code
+Cap 5/day for the first 3 days after the first send, then 20. Random 2 to 5 minute gap. Verified emails only.
+Hard excludes (MICE, events, staffing, manpower) on company name and industry. Sending halts on 2+ bounces,
+or above 3% once 10 are sent. Replies and bounces are detected over IMAP and stop that row.
+Follow-ups (day 5, day 12) thread to the first message. WhatsApp links appear in the digest on day 3.
 
-## First run checklist
-- `python pipeline.py --dump data/raw.json --dry-run`, then inspect the keys. `normalise()` in `pipeline.py`
-  tries several likely field names but I could not see the actor's real output; adjust there. Also check
-  `apify_input.json` (optional, overrides `DEFAULT_INPUT`) against the actor's input schema.
-- Apollo endpoints follow the current docs (`mixed_people/api_search`, `people/match`). Revealing an email
-  spends credits, so `enrich.py` defaults to 15 companies per run.
+## Tests
+`python -m pytest` (smtplib and imaplib are faked; nothing touches the network).
 
-## Guardrails in code
-Daily cap 5/10/15/20 by week since first send, halt on >3% bounces (min sample 10, or 2+ bounces), verified
-emails only, never Do not contact, first line rejected if flattery, dashes, 20+ words or health terms, missing
-template variables abort the draft. Tests: `pytest`.
+## Not built yet (REQUIREMENTS section 10)
+Step 7 personal line via Gemini (`line` defaults to a generic sentence; override per row with `line N: ...`).
+Steps 3 to 4 are live checks that need your Gmail: one email to a second address, a shortened `FU1_DAYS`
+to confirm threading, then each reply command.
 
-## Not built yet
-Chrome autofill extension (spec step 6). Use Simplify with `profile.json` as the reference until then.
-
-## Running without Gemini / Apollo
-- No `GEMINI_API_KEY`: `pipeline.py` still scrapes, dedupes and applies hard excludes. New companies land as
-  **Needs review** with no score. Ask Claude (Airtable MCP) to score them with the section 7 rubric and set
-  `ICP score`, `ICP reason` and `Status`. `draft.py` skips contacts with an empty `First line` until it is filled.
-  `replies.py` logs replies unclassified for Claude to classify.
-- No `APOLLO_API_KEY`: the Actions workflow skips `enrich.py`. Add Contacts by hand (Email, First name, Company
-  link, Email status = verified, Contact type, Stage = New) and `draft.py` takes it from there.
+## Legacy
+The earlier Airtable / Apify / Apollo-API / Gmail-draft design (`pipeline.py`, `enrich.py`, `draft.py`, `followup.py`,
+`replies.py`, `linkedin.py`, `setup_airtable.py`, `fo/`, `.github/workflows/`) is superseded by the doc above.
+It is untouched but unused; say the word and it gets deleted.

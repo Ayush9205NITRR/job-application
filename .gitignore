@@ -7,3 +7,7 @@ __pycache__/
 .pytest_cache/
 *.pyc
 .venv/
+*.csv
+queue.csv
+inbox_seen.txt
+outbound.log

@@ -1,10 +1,9 @@
 name: Weekly scrape and enrich
 
+# LEGACY (Airtable design, superseded by outbound.py). Schedule removed; manual runs only.
 # Stages 1-4 only (scrape, score, enrich). They write to Airtable and send nothing.
 # Gmail stages (draft, followup, replies) need browser OAuth and stay on your laptop.
 on:
-  schedule:
-    - cron: "30 3 * * 1" # Mondays 09:00 IST
   workflow_dispatch:
     inputs:
       dry_run:
