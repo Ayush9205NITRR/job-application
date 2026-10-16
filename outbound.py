@@ -38,7 +38,8 @@ DIGEST_PREFIX = "[Outbound] Action needed"
 QUEUE = Path(os.environ.get("OUTBOUND_QUEUE", Path(__file__).resolve().parent / "queue.csv"))
 
 COLUMNS = ["approved", "email", "first", "company", "title", "phone", "about", "line", "subject", "body",
-           "fu1", "fu2", "wa_link", "sent_at", "fu1_at", "fu2_at", "wa_shown", "message_id", "replied"]
+           "fu1", "fu2", "wa_link", "sent_at", "fu1_at", "fu2_at", "wa_shown", "message_id", "replied",
+           "company_li", "overlap_note", "suggested_line"]  # last three: added for the shortlist / overlap flow
 CLOSED = {"y", "skip", "bounced"}  # values of `replied` that stop the sequence
 
 # ---- Copy (REQUIREMENTS section 7). No em dashes. Rs not the rupee sign, to stay plain ASCII-safe. ----
@@ -144,6 +145,7 @@ ALIASES = {
     "status": ["emailstatus"], "first": ["firstname"], "title": ["title", "jobtitle"],
     "phone": ["mobilephone", "workdirectphone", "directphone", "corporatephone", "phone"],
     "about": ["shortdescription", "seodescription", "keywords"], "industry": ["industry"],
+    "li": ["companylinkedinurl", "companylinkedin"],
 }
 
 
@@ -176,7 +178,7 @@ def draft(csv_path):
                 phone = next((p for p in (clean_phone(r.get(a, "")) for a in ALIASES["phone"]) if p), "")
                 row = {c: "" for c in COLUMNS}
                 row.update(email=em, first=first, company=company, title=get("title"), phone=phone,
-                           about=re.sub(r"\s+", " ", get("about"))[:300], **build(first, company, em, phone))
+                           about=re.sub(r"\s+", " ", get("about"))[:300], company_li=get("li"), **build(first, company, em, phone))
                 rows.append(row)
                 seen.add(em)
                 added += 1

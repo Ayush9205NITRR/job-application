@@ -9,6 +9,14 @@ Nothing is sent without `approved=y`. Plain text, no tracking, resume link only 
 3. Apollo: export People CSV (seed / pre-seed, 2 to 50 employees, Founder / Co-Founder / CEO).
 4. `python outbound.py draft apollo.csv`, then `python outbound.py cycle --dry` to read what would happen.
 
+## UI flow (tabs)
+1. **Companies**: upload the Apollo company CSV. It is matched onto the Airtable companies (LinkedIn slug, website, name) and funding / employees / industry are written into Airtable.
+2. **Shortlist**: seed or pre-seed, 2 to 50 employees = green and tickable. Save, then "download calendar (.ics)" for one apply block per weekday (open the file once, your calendar adds them). "Mark ticked as applied" when done.
+3. **POCs**: upload your clients once (`client, industry, persona, deal, name_usable`), then the POC CSV (`Company Linkedin Profile, POC First Name, POC Contact No, POC Email`). Each shortlisted company's public site is read (robots.txt respected) and compared with your clients: same client becomes the opening line, same industry is only suggested.
+4. **Review and send**: edit the line, approve, send. Follow-ups go out on day 5 and day 12.
+
+Needs `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID` (in `.env` or Codespaces secrets) for tabs 1 to 3, and `pip install requests`.
+
 ## UI (easiest way)
 ```
 export GMAIL_USER=you@gmail.com GMAIL_APP_PASSWORD=xxxx

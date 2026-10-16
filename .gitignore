@@ -11,3 +11,4 @@ __pycache__/
 queue.csv
 inbox_seen.txt
 outbound.log
+site_cache/

@@ -103,7 +103,10 @@ def ensure_fields(base):
     for name, (_, ftype) in FIELDS.items():
         if name not in have:
             print(f"adding field {name}")
-            request("POST", f"{meta}/{t['id']}/fields", headers=at._headers(), json={"name": name, "type": ftype})
+            body = {"name": name, "type": ftype}
+            if ftype == "checkbox":
+                body["options"] = {"icon": "check", "color": "greenBright"}
+            request("POST", f"{meta}/{t['id']}/fields", headers=at._headers(), json=body)
 
 
 def main():

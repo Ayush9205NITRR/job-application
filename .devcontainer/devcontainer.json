@@ -1,10 +1,23 @@
 {
   "name": "Outbound UI",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
-  "forwardPorts": [8765],
+  "forwardPorts": [
+    8765
+  ],
   "portsAttributes": {
-    "8765": { "label": "Outbound UI", "visibility": "private", "onAutoForward": "openBrowser" }
+    "8765": {
+      "label": "Outbound UI",
+      "visibility": "private",
+      "onAutoForward": "openBrowser"
+    }
   },
   "postStartCommand": "nohup python ui.py > /tmp/ui.log 2>&1 &",
-  "customizations": { "vscode": { "settings": { "python.defaultInterpreterPath": "/usr/local/bin/python" } } }
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  },
+  "postCreateCommand": "pip install requests"
 }
