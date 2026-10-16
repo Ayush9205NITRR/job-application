@@ -9,6 +9,15 @@ Nothing is sent without `approved=y`. Plain text, no tracking, resume link only 
 3. Apollo: export People CSV (seed / pre-seed, 2 to 50 employees, Founder / Co-Founder / CEO).
 4. `python outbound.py draft apollo.csv`, then `python outbound.py cycle --dry` to read what would happen.
 
+## UI (easiest way)
+```
+export GMAIL_USER=you@gmail.com GMAIL_APP_PASSWORD=xxxx
+python ui.py     # open http://127.0.0.1:8765
+```
+Upload the Apollo CSV, relevant rows are drafted automatically, edit the opening line, tick and approve, then
+"Send approved + follow-ups". Local only (127.0.0.1), the upload is deleted after reading, nothing sends without
+approval. Do not run the UI and the cron `cycle` at the same moment (both write queue.csv).
+
 ## Daily loop
 `python outbound.py cycle` = inbox + send + followup + notify. Run it at 9 AM and 5 PM IST on any always-on machine:
 ```
