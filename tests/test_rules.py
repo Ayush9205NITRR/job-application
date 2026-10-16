@@ -124,3 +124,30 @@ def test_translate_jobs_rewrites_company_links():
     rows, orphans = c.translate_jobs(old_j, old_c, {"https://www.linkedin.com/company/a": "recNEW"})
     assert rows[0]["Company LinkedIn URL"] == ["recNEW"] and rows[0]["Job ID"] == "1" and "_id" not in rows[0]
     assert "Company LinkedIn URL" not in rows[1] and orphans == 1
+
+
+def test_apollo_match_order_and_updates(tmp_path):
+    import apollo_to_airtable as a
+    p = tmp_path / "apollo.csv"
+    p.write_text(
+        "Company Name,Company Linkedin Url,Website,Latest Funding,Total Funding,# Employees,Industry,First Name\n"
+        "Acme Pvt Ltd,http://www.linkedin.com/company/Acme/,https://acme.io,Seed,$2M,12,SaaS,Riya\n"
+        "Acme Pvt Ltd,http://www.linkedin.com/company/acme,,,,,,Tom\n"          # 2nd contact, same company
+        "Beta Inc,,https://www.beta.co/about,Series A,$10M,40,Fintech,Ann\n"
+        "Gamma Labs,,,Seed,$1M,5,AI,Raj\n"
+        "Dup Co,,,Seed,$1M,5,AI,X\n"
+        "Nowhere,http://linkedin.com/company/nowhere,,Seed,,,,Y\n")
+    ap = a.load_apollo(p)
+    assert len(ap) == 5 and ap["https://www.linkedin.com/company/acme"]["Total funding"] == "$2M"
+    cos = [{"_id": "r1", "Company LinkedIn URL": "https://www.linkedin.com/company/acme", "Company": "Acme", "Status": "Shortlisted"},
+           {"_id": "r2", "Company LinkedIn URL": "https://www.linkedin.com/company/beta-x", "Company": "Beta", "Website": "https://beta.co"},
+           {"_id": "r3", "Company LinkedIn URL": "https://www.linkedin.com/company/gamma", "Company": "Gamma Labs"},
+           {"_id": "r4", "Company LinkedIn URL": "https://www.linkedin.com/company/d1", "Company": "Dup Co"},
+           {"_id": "r5", "Company LinkedIn URL": "https://www.linkedin.com/company/d2", "Company": "Dup Co"}]
+    matches, unmatched = a.match(ap, cos)
+    assert {(m[0]["_id"], m[2]) for m in matches} == {("r1", "linkedin"), ("r2", "domain"), ("r3", "name")}
+    assert {u["name"] for u in unmatched} == {"Dup Co", "Nowhere"}      # ambiguous name never guesses
+    up = dict(a.updates(matches))
+    assert up["r1"]["Funding stage"] == "Seed" and up["r1"]["Apollo match"] == "linkedin"
+    assert up["r1"]["Website"] == "https://acme.io" and "Status" not in up["r1"]
+    assert "Website" not in up["r2"]                                    # existing website kept
