@@ -20,6 +20,15 @@ COPY = ("Companies", "Jobs")
 LINK_FIELD = "Company LinkedIn URL"  # Jobs -> Companies
 
 
+def base_id_of(raw):
+    """Accepts an app... id or a pasted Airtable URL."""
+    import re
+    m = re.search(r"app[A-Za-z0-9]{14}", raw)
+    if not m:
+        raise SystemExit(f"not an Airtable base id or URL: {raw!r}")
+    return m.group(0)
+
+
 def plain(fields):
     return [f for f in fields if f["type"] != "multipleRecordLinks"]
 
@@ -54,6 +63,30 @@ def create_base(name, workspace):
     return r["id"]
 
 
+def ensure_tables(base):
+    """Make sure Companies + Jobs exist in `base` with the right fields and the Jobs->Companies link.
+    Only adds what is missing; never touches other tables (e.g. the default 'Table 1')."""
+    meta = f"https://api.airtable.com/v0/meta/bases/{base}"
+    get = lambda: {t["name"]: t for t in request("GET", meta + "/tables", headers=_headers()).json()["tables"]}
+    tables = get()
+    for name in COPY:
+        have = {f["name"] for f in tables.get(name, {}).get("fields", [])}
+        if name not in tables:
+            print(f"creating table {name}")
+            request("POST", meta + "/tables", headers=_headers(), json={"name": name, "fields": plain(SCHEMA[name])})
+        else:
+            for f in plain(SCHEMA[name]):
+                if f["name"] not in have:
+                    print(f"adding field {name}.{f['name']}")
+                    request("POST", f"{meta}/tables/{tables[name]['id']}/fields", headers=_headers(), json=f)
+    tables = get()
+    if LINK_FIELD not in {f["name"] for f in tables["Jobs"]["fields"]}:
+        print("adding link Jobs -> Companies")
+        request("POST", f"{meta}/tables/{tables['Jobs']['id']}/fields", headers=_headers(),
+                json={"name": LINK_FIELD, "type": "multipleRecordLinks",
+                      "options": {"linkedTableId": tables["Companies"]["id"]}})
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default="Founder's Office Outbound (scraped copy)")
@@ -66,8 +99,10 @@ def main():
     if a.dry_run:
         print("dry run: nothing created")
         return
-    new = a.existing_base
-    if not new:
+    new = a.existing_base and base_id_of(a.existing_base)
+    if new:
+        ensure_tables(new)
+    else:
         ws = os.environ.get("WORKSPACE_ID", "").strip()
         if not ws.startswith("wsp"):
             raise SystemExit("WORKSPACE_ID (wsp...) is required to create a base")
