@@ -33,17 +33,20 @@ Examples:
 `reason` must name the evidence (what you saw), not repeat the label.
 
 ## verify_company
-Input: `{"company", "linkedin", "search_results": [...]}`
+Input: `{"company", "linkedin", "website", "search_results": [...]}` (`search_results` is often empty: search the web yourself, e.g. "<company> funding", their website and LinkedIn page)
 Result: `{"same_company": true|false, "website": "https://...", "stage": "Pre-Seed|Seed|Series A|...", "reason": "..."}`
 `same_company` is true only if the results clearly describe this exact company. If unsure, `Confidence = Low`.
 
 ## pick_decision_makers
-Input: `{"company", "people": [{"name", "title", "linkedin"}]}`
+Input: `{"company", "linkedin", "website", "people": [...]}`. `people` is usually empty: find founders / co-founders, and HR or TA people, from the company website and the public LinkedIn company page. Only list people you actually saw. Nobody found -> `{"people": []}` with `Confidence = Low`.
+Each person looks like `{"name", "title", "linkedin"}`.
 Result: `{"people": [{"name", "title", "role": "Founder|HR|TA", "linkedin": "https://linkedin.com/in/..."}]}`
 Pick Founders and Co-founders, plus HR and Talent Acquisition. Several per company is fine. Skip the rest.
 
 ## Rules
 - Result is valid JSON: double quotes, no comments.
+- If a `Lane` number is given to you, take only rows with that `Lane`.
+- Do not edit `Lane` or `Audit` either.
 - Do not edit `Task ID`, `Type`, `Company`, `Company record`, `Input`, `Note`, `Tries`.
 - Never set `Status` to `Applied`, `Failed` or `Needs human`. Code does that.
 - Never invent. When unsure: `Confidence = Low`.

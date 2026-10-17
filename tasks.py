@@ -31,6 +31,8 @@ FIELDS = [
     {"name": "Confidence", "type": "singleSelect", "options": {"choices": [{"name": "High"}, {"name": "Low"}]}},
     {"name": "Status", "type": "singleSelect", "options": {"choices": [{"name": s} for s in STATUSES]}},
     {"name": "Tries", "type": "number", "options": {"precision": 0}},
+    {"name": "Lane", "type": "number", "options": {"precision": 0}},
+    {"name": "Audit", "type": "singleSelect", "options": {"choices": [{"name": "OK"}, {"name": "Wrong"}]}},
     {"name": "Note", "type": "multilineText"},
     {"name": "Created at", "type": "dateTime", "options": {"dateFormat": {"name": "iso"}, "timeFormat": {"name": "24hour"}, "timeZone": "utc"}},
     {"name": "Started at", "type": "dateTime", "options": {"dateFormat": {"name": "iso"}, "timeFormat": {"name": "24hour"}, "timeZone": "utc"}},
@@ -120,15 +122,17 @@ APPLY = {"verify_company": apply_verify_company, "pick_decision_makers": apply_p
 
 
 # ---- The loop -----------------------------------------------------------------------------------
-def create_task(kind, company, company_record, payload, tasks=None):
-    """Idempotent: one live task per (type, company record)."""
+def create_task(kind, company, company_record, payload, tasks=None, lane=None):
+    """Idempotent: one task per (type, company record) ever. Reruns go through reopen(), never a second row."""
     tasks = tasks or Tasks
     key = f"{kind}:{company_record}"
-    live = [t for t in tasks.all() if t.get("Task ID") == key and t.get("Status") in ("Open", "Working", "Done", "Needs human")]
-    if live:
+    if any(t.get("Task ID") == key for t in tasks.all()):
         return None
-    return tasks.create([{"Task ID": key, "Type": kind, "Company": company, "Company record": company_record,
-                          "Input": json.dumps(payload, ensure_ascii=False), "Status": "Open", "Tries": 0, "Created at": stamp()}])[0]
+    row = {"Task ID": key, "Type": kind, "Company": company, "Company record": company_record,
+           "Input": json.dumps(payload, ensure_ascii=False), "Status": "Open", "Tries": 0, "Created at": stamp()}
+    if lane:
+        row["Lane"] = lane
+    return tasks.create([row])[0]
 
 
 def apply_done(tasks=None, tables=None):
@@ -234,14 +238,33 @@ def reopen(names, tasks=None):
     return n
 
 
+CONTACT_FIELDS = [
+    {"name": "Email", "type": "singleLineText"}, {"name": "First name", "type": "singleLineText"},
+    {"name": "Last name", "type": "singleLineText"}, {"name": "Title", "type": "singleLineText"},
+    {"name": "LinkedIn URL", "type": "url"},
+    {"name": "Contact type", "type": "singleSelect", "options": {"choices": [{"name": r} for r in (*ROLES, "Job poster")]}},
+    {"name": "Stage", "type": "singleSelect", "options": {"choices": [{"name": s} for s in ("New", "Drafted", "Approved", "Sent", "Replied", "Do not contact")]}},
+]
+
+
 def setup():
+    """Additive: creates Tasks and Contacts if missing, adds missing fields to Tasks. Never edits existing fields."""
     meta = f"https://api.airtable.com/v0/meta/bases/{base_id()}/tables"
-    have = {t["name"] for t in request("GET", meta, headers=_headers()).json()["tables"]}
-    if "Tasks" in have:
-        print("Tasks table already exists")
-        return
-    request("POST", meta, headers=_headers(), json={"name": "Tasks", "fields": FIELDS})
-    print("created Tasks table")
+    tables = {t["name"]: t for t in request("GET", meta, headers=_headers()).json()["tables"]}
+    if "Tasks" not in tables:
+        request("POST", meta, headers=_headers(), json={"name": "Tasks", "fields": FIELDS})
+        print("created Tasks table")
+    else:
+        have = {f["name"] for f in tables["Tasks"]["fields"]}
+        for f in FIELDS:
+            if f["name"] not in have:
+                request("POST", f"{meta}/{tables['Tasks']['id']}/fields", headers=_headers(), json=f)
+                print("added field Tasks." + f["name"])
+    if "Contacts" not in tables:
+        made = request("POST", meta, headers=_headers(), json={"name": "Contacts", "fields": CONTACT_FIELDS}).json()
+        request("POST", f"{meta}/{made['id']}/fields", headers=_headers(), json={
+            "name": "Company", "type": "multipleRecordLinks", "options": {"linkedTableId": tables["Companies"]["id"]}})
+        print("created Contacts table")
 
 
 if __name__ == "__main__":

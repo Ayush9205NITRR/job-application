@@ -1,0 +1,34 @@
+name: Task plan
+
+# Code side of the code <-> agent mailbox. setup is additive (creates the Tasks table only if missing).
+on:
+  workflow_dispatch:
+    inputs:
+      cmd:
+        description: "plan | plan-dry | stats | audit | cycle"
+        default: "stats"
+      args:
+        description: "Optional: max tasks per type for plan (default 20)"
+        default: ""
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: appms9ERcB5Ws3r0w  # pinned: the AIRTABLE_BASE_ID secret still points at the OLD base
+      CMD: ${{ inputs.cmd }}
+      ARGS: ${{ inputs.args }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - run: |
+          case "$CMD" in
+            plan) python taskplan.py plan --max "${ARGS:-20}" ;;
+            plan-dry) python taskplan.py plan --dry --max "${ARGS:-20}" ;;
+            *) python taskplan.py "$CMD" ;;
+          esac
