@@ -76,3 +76,16 @@ def test_requeue_stale_then_fail():
     assert tasks.requeue_stale(t) == 2
     by = {r["_id"]: r for r in t.rows}
     assert by["t1"]["Status"] == "Open" and by["t2"]["Status"] == "Working" and by["t3"]["Status"] == "Failed"
+
+
+def test_seed_picks_named_post_companies_once():
+    comps = Fake([{"_id": "c1", "Company": "NextDimension AI", "Company LinkedIn URL": "u1"},
+                  {"_id": "c2", "Company": "SabiHR", "Company LinkedIn URL": "u2"},
+                  {"_id": "c3", "Company": "Old Co", "Company LinkedIn URL": "u3"}])
+    jobs = Fake([{"_id": "j1", "Job ID": "post-1", "Title": "[Post] hiring FO", "Job URL": "p1", "Company LinkedIn URL": ["c1"]},
+                 {"_id": "j2", "Job ID": "post-2", "Title": "[Post] hiring BD", "Job URL": "p2", "Company LinkedIn URL": ["c2"]},
+                 {"_id": "j3", "Job ID": "999", "Title": "Real job", "Job URL": "p3", "Company LinkedIn URL": ["c3"]}])
+    t = Fake()
+    assert sorted(tasks.seed_classify_post(["nextdimension", "sabihr", "old co"], tasks=t, companies=comps, jobs=jobs)) == ["NextDimension AI", "SabiHR"]
+    assert tasks.seed_classify_post(["nextdimension"], tasks=t, companies=comps, jobs=jobs) == []
+    assert json.loads(t.rows[0]["Input"])["post"] in ("hiring FO", "hiring BD")

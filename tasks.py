@@ -2,6 +2,7 @@
 The agent touches only this table. Nothing here sends email.
 
     python tasks.py setup      create the Tasks table if missing (additive)
+    python tasks.py seed ["Name1|Name2"]  open classify_post tasks for post-sourced companies
     python tasks.py apply      validate Done tasks and apply them (Applied / Failed / Needs human)
     python tasks.py requeue    reopen Working tasks stuck for 30+ minutes (max 2 retries)
 """
@@ -160,6 +161,25 @@ def requeue_stale(tasks=None, at_time=None):
     return n
 
 
+def seed_classify_post(names=None, n=5, tasks=None, companies=None, jobs=None):
+    """Open classify_post tasks for companies that came from LinkedIn posts. names: substrings to pick (default: first n)."""
+    tasks, companies, jobs = tasks or Tasks, companies or at.Companies, jobs or at.Jobs
+    comps = {c["_id"]: c for c in companies.all()}
+    made = []
+    for j in sorted(jobs.all(), key=lambda j: j.get("Title", "")):
+        if not str(j.get("Job ID", "")).startswith("post-"):
+            continue
+        for cid in j.get("Company LinkedIn URL") or []:
+            c = comps.get(cid, {})
+            name = c.get("Company") or ""
+            if names and not any(x.lower() in name.lower() for x in names):
+                continue
+            payload = {"company": name, "linkedin": c.get("Company LinkedIn URL", ""), "post": j.get("Title", "")[7:], "post_url": j.get("Job URL", "")}
+            if len(made) < (len(names) if names else n) and create_task("classify_post", name, cid, payload, tasks):
+                made.append(name)
+    return made
+
+
 def setup():
     meta = f"https://api.airtable.com/v0/meta/bases/{base_id()}/tables"
     have = {t["name"] for t in request("GET", meta, headers=_headers()).json()["tables"]}
@@ -172,4 +192,4 @@ def setup():
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    {"setup": setup, "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
+    {"setup": setup, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()

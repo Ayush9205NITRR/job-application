@@ -5,8 +5,11 @@ on:
   workflow_dispatch:
     inputs:
       cmd:
-        description: "setup | apply | requeue"
+        description: "setup | seed | apply | requeue"
         default: "setup"
+      args:
+        description: "For seed: company names separated by | (empty = first 5)"
+        default: ""
 
 jobs:
   run:
@@ -16,10 +19,11 @@ jobs:
       AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
       AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID || 'appms9ERcB5Ws3r0w' }}
       CMD: ${{ inputs.cmd }}
+      ARGS: ${{ inputs.args }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install requests python-dotenv
-      - run: python tasks.py "$CMD"
+      - run: python tasks.py "$CMD" "$ARGS"

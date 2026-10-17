@@ -19,6 +19,6 @@ Result: `{"people": [{"name": "...", "title": "...", "role": "Founder|HR|TA", "l
 Pick Founders / Co-founders, and HR or Talent Acquisition people. Several per company is fine. Skip everyone else.
 
 ## classify_post
-Input: `{"company": "...", "post": "..."}`
+Input: `{"company": "...", "linkedin": "...", "post": "first line of the post", "post_url": "..."}`. Open `post_url` if you can; otherwise judge from the company name and first line (then Confidence = Low if unsure).
 Result: `{"kind": "startup|recruiter|other"}`
 `recruiter` = staffing firm, job board, consultancy hiring for someone else. `other` = not a real hiring post. `startup` = the company is hiring for itself.
