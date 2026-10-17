@@ -1,0 +1,44 @@
+name: Apify sample run
+
+# Manual. Runs an actor ONCE with a tiny input and prints the shape of the first result. Costs a few cents at most.
+on:
+  workflow_dispatch:
+    inputs:
+      actor:
+        default: "harvestapi~linkedin-post-search"
+      input_json:
+        description: "Actor input as one line of JSON"
+        default: '{"searchQueries":["hiring founders office"],"maxPosts":3,"postedLimit":"month","sortBy":"date"}'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      ACTOR: ${{ inputs.actor }}
+      INPUT: ${{ inputs.input_json }}
+    steps:
+      - name: Run and show shape
+        run: |
+          printf '%s' "$INPUT" > input.json
+          curl -sS -X POST -H 'Content-Type: application/json' --data @input.json \
+            "https://api.apify.com/v2/acts/$ACTOR/run-sync-get-dataset-items?token=$APIFY_TOKEN&format=json" -o out.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("out.json"))
+          if isinstance(d, dict): print("ERROR", json.dumps(d)[:600]); raise SystemExit(1)
+          print("items:", len(d))
+          def shape(x, depth=0):
+              if isinstance(x, dict) and depth < 3: return {k: shape(v, depth + 1) for k, v in x.items()}
+              if isinstance(x, list): return [shape(x[0], depth + 1)] if x else []
+              return type(x).__name__
+          if d:
+              print("SHAPE:", json.dumps(shape(d[0]), indent=1))
+              def short(x):
+                  if isinstance(x, str): return x[:140]
+                  if isinstance(x, dict): return {k: short(v) for k, v in x.items()}
+                  if isinstance(x, list): return [short(v) for v in x[:2]]
+                  return x
+              for it in d[:2]: print("SAMPLE:", json.dumps(short(it), ensure_ascii=False)[:2500])
+          PY
