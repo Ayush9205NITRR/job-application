@@ -116,9 +116,14 @@ def posts_to_jobs(items):
     return jobs, dict(st)
 
 
-def run_posts(items, log=print):
+def run_posts(items, log=print, only_new=False):
     jobs, st = posts_to_jobs(items)
     log(f"posts: {st}")
+    if only_new and jobs:
+        listed = {c.get("Company LinkedIn URL") for c in at.Companies.all()}
+        keep = [j for j in jobs if rules.group_by_company([j]) and next(iter(rules.group_by_company([j]))) not in listed]
+        log(f"only new: {len(keep)} of {len(jobs)} posts are from companies not in Airtable yet")
+        jobs = keep
     if not jobs:
         return {"companies": 0, "jobs": 0, "new": 0, "posts": st}
     return {**run_normalised(jobs, log), "posts": st}
