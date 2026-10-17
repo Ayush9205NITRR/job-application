@@ -1,0 +1,25 @@
+name: Tasks
+
+# Code side of the code <-> agent mailbox. setup is additive (creates the Tasks table only if missing).
+on:
+  workflow_dispatch:
+    inputs:
+      cmd:
+        description: "setup | apply | requeue"
+        default: "setup"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID || 'appms9ERcB5Ws3r0w' }}
+      CMD: ${{ inputs.cmd }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - run: python tasks.py "$CMD"
