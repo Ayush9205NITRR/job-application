@@ -8,6 +8,7 @@
 """
 import argparse
 import json
+import re
 from datetime import date
 
 from fo import airtable as at
@@ -61,6 +62,66 @@ def scrape(keywords=None, location=None, limit=None, date_posted=None, log=print
     if errors and not items:
         raise SystemExit("every scrape run failed")
     return items
+
+
+# ---- LinkedIn hiring POSTS (Apify harvestapi/linkedin-post-search) ------------------------------------------------
+POST_QUERIES = ["hiring founder's office", "hiring chief of staff", "hiring business development associate",
+                "founder's office hiring startup", "we are hiring associate to the CEO"]
+POST_ROLE = re.compile(r"founder['\u2019]?s?\s+office|chief of staff|business development|\bbd\b|sales|growth|strategy|"
+                       r"associate to (the )?(ceo|founder)|ceo['\u2019]?s office", re.I)
+JOB_BOARD = re.compile(r"\bjobs?\b|vacanc|recruit|hiring|career|placement|staffing|manpower|talent", re.I)
+
+
+def scrape_posts(queries=None, max_posts=50, posted_limit="month", sort_by="date", log=print) -> list[dict]:
+    """One actor run for all queries. max_posts is per query. Costs about $0.002 per post."""
+    actor = env("APIFY_POSTS_ACTOR", "harvestapi~linkedin-post-search", required=False)
+    inp = {"searchQueries": queries or POST_QUERIES, "maxPosts": int(max_posts), "postedLimit": posted_limit, "sortBy": sort_by}
+    url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
+    items = request("POST", url, params={"token": env("APIFY_TOKEN")}, json=inp, timeout=1800).json()
+    log(f"  {len(inp['searchQueries'])} queries: {len(items)} posts")
+    return items
+
+
+def posts_to_jobs(items):
+    """Hiring posts -> job dicts (normalise() shape) plus counts of what was dropped and why.
+    Kept: posts by a COMPANY page, about a role we care about, not from a job board or recruiter, not an assistant role.
+    Posts by people are counted but dropped: they carry no company link to match on."""
+    from collections import Counter
+    jobs, seen, st = [], set(), Counter()
+    for it in items:
+        st["total"] += 1
+        a = it.get("author") or {}
+        text = (it.get("content") or "").strip()
+        title = re.sub(r"\s+", " ", next((l for l in text.splitlines() if l.strip()), "")).strip()[:120]
+        pid = str(it.get("id") or it.get("entityId") or "")
+        if not pid or pid in seen:
+            st["duplicate"] += 1
+        elif a.get("type") != "company":
+            st["person"] += 1
+        elif "/showcase/" in (a.get("linkedinUrl") or "") or not a.get("universalName"):
+            st["showcase page"] += 1
+        elif JOB_BOARD.search(a.get("name") or ""):
+            st["job board or recruiter"] += 1
+        elif not POST_ROLE.search(text[:600]):
+            st["not our roles"] += 1
+        elif rules.hard_exclude(a.get("name") or "", title):
+            st["hard excluded"] += 1
+        else:
+            seen.add(pid)
+            st["kept"] += 1
+            jobs.append({"job_id": "post-" + pid, "title": "[Post] " + title, "job_url": it.get("linkedinUrl") or it.get("shareLinkedinUrl") or "",
+                         "posted": (it.get("postedAt") or {}).get("date"), "location": "", "poster": "", "poster_url": "",
+                         "company": a.get("name") or "", "company_url": f"https://www.linkedin.com/company/{a['universalName']}",
+                         "website": "", "headcount": None, "industry": "", "description": text[:1000], "about": ""})
+    return jobs, dict(st)
+
+
+def run_posts(items, log=print):
+    jobs, st = posts_to_jobs(items)
+    log(f"posts: {st}")
+    if not jobs:
+        return {"companies": 0, "jobs": 0, "new": 0, "posts": st}
+    return {**run_normalised(jobs, log), "posts": st}
 
 
 def pick(item: dict, *keys, default=None):
@@ -134,7 +195,11 @@ def classify_new(companies: dict[str, list[dict]]) -> dict[str, dict]:
 
 def run(raw, log=print):
     """Dedupe scraped jobs by company, classify, upsert into Airtable. Returns {companies, jobs, new}."""
-    jobs = [normalise(r) for r in raw]
+    return run_normalised([normalise(r) for r in raw], log)
+
+
+def run_normalised(jobs, log=print):
+    """Same, for job dicts that are already in normalise()'s shape (LinkedIn jobs and hiring posts share it)."""
     companies = rules.group_by_company(jobs)
     log(f"{len(companies)} unique companies ({len(jobs) - sum(map(len, companies.values()))} jobs dropped: no company URL / duplicate)")
 

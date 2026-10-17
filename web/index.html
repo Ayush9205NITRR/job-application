@@ -77,7 +77,7 @@ const SEEDRE = /seed|pre[- ]?seed|angel|bootstrap/i;
 
 const S = {step: 1, companies: null, cerr: "", queue: [], stats: {sent_today: 0, cap: 5, halted: false, counts: {}}, icp: {}, clients: "", keywords: "",
   env: {}, selected: new Set(), manual: {}, qfilter: "review", qsearch: "", csearch: "", hideNon: false, last_scrape: null, warn: "", job: {id: 0, running: false, log: []},
-  scrape: {loc: "India", limit: 300, date: "pastMonth"}, focus: 0, contactsResult: null, apolloResult: null, verified: "no", drawerOpen: false};
+  scrape: {loc: "India", limit: 300, date: "pastMonth"}, posts: {limit: 50, date: "month"}, postQueries: "", last_posts: null, focus: 0, contactsResult: null, apolloResult: null, verified: "no", drawerOpen: false};
 let pollTimer = null, saveTimer = null, icpTimer = null;
 
 // ---------- api ----------
@@ -134,7 +134,8 @@ async function boot() {
   pollJob(true);
 }
 function applyState(st) {
-  Object.assign(S, {queue: st.queue, stats: st.stats, icp: st.icp, clients: st.clients, keywords: st.keywords, env: st.env, last_scrape: st.last_scrape, warn: st.warn});
+  Object.assign(S, {queue: st.queue, stats: st.stats, icp: st.icp, clients: st.clients, keywords: st.keywords, env: st.env, last_scrape: st.last_scrape, warn: st.warn,
+    postQueries: st.post_queries, last_posts: st.last_posts});
   S.savedSelected = new Set(st.selected);
 }
 async function loadCompanies(refresh) {
@@ -157,7 +158,7 @@ async function pollJob(first) {
 async function onJobDone(j) {
   S.jobDoneAt = Date.now(); setTimeout(drawer, 6200);
   await reloadState();
-  if (j.name === "scrape jobs") await loadCompanies(true);        // new companies live in Airtable
+  if (j.name === "scrape jobs" || j.name === "scrape posts") await loadCompanies(true);        // new companies live in Airtable
   else if (j.name === "find overlap") await loadCompanies(false); // results are local, no Airtable round trip
   toast(`${j.name}: done`); render();
 }
@@ -198,6 +199,10 @@ function costText() {
   const n = (S.keywords || "").split("\n").filter(x => x.trim()).length, jobs = n * (S.scrape.limit || 0);
   return `${n} keywords x ${S.scrape.limit} = up to ${jobs.toLocaleString()} jobs, about $${(jobs * 0.0003).toFixed(2)}. Runs 3 at a time, roughly ${Math.max(2, Math.ceil(n / 3) * 2)} to ${Math.max(4, Math.ceil(n / 3) * 4)} minutes. Progress shows bottom right.`;
 }
+function postCost() {
+  const n = (S.postQueries || "").split("\n").filter(x => x.trim()).length, posts = n * (S.posts.limit || 0);
+  return `${n} searches x ${S.posts.limit} = up to ${posts.toLocaleString()} posts, about $${(posts * 0.002).toFixed(2)} (the actor charges $0.002 per post).`;
+}
 function view1() {
   const e = S.env, ls = S.last_scrape;
   return head("1. Scrape jobs", "Apify finds Founder's Office jobs on LinkedIn. Companies and their jobs are saved to Airtable, duplicates are merged.") +
@@ -212,7 +217,13 @@ function view1() {
       ${ls ? `<span class="chip ok">last scrape: ${ls.jobs} jobs, ${ls.companies} companies</span>` : ""}
       <button class="btn sm" data-act="refresh">Refresh from Airtable</button><span class="grow"></span><button class="btn pri" data-act="go" data-n="2">Next: Apollo CSV</button></div>
       ${S.cerr ? `<div class="note bad" style="margin-top:10px">${esc(S.cerr)}</div>` : ""}</div>
-    <div class="card"><b>LinkedIn posts</b> <span class="chip warn">not connected</span><p class="mute" style="margin:6px 0 0">Posts need a second Apify actor. Tell me which actor you want to use and it plugs in here next to jobs.</p></div>`;
+    <div class="card"><b>LinkedIn hiring posts</b> <span class="chip">harvestapi/linkedin-post-search</span>
+      <p class="mute" style="margin:6px 0 10px">Finds posts like "we are hiring a Founder's Office associate". Only posts from <b>company pages</b> that mention our roles are kept; job boards, recruiters, assistant roles and posts by individual people are dropped (a person's post has no company link to match on). Kept companies and their posts are saved next to the jobs, the post link shows as the "job" to apply to.</p>
+      <div class="filters"><div style="grid-column:span 2"><label class="f">Searches (one per line, same as the LinkedIn search bar)</label><textarea id="pq">${esc(S.postQueries)}</textarea></div>
+        <div><label class="f">Max posts per search</label><input type="number" id="pmax" value="${S.posts.limit}" min="10" max="500"></div>
+        <div><label class="f">Posted</label><select id="pdp">${[["month", "Past month"], ["week", "Past week"], ["3months", "Past 3 months"], ["24h", "Past 24 hours"], ["any", "Any time"]].map(([v, l]) => `<option value="${v}" ${S.posts.date === v ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
+      <div class="row" style="margin-top:12px"><button class="btn pri" data-act="scrapeposts" ${S.job.running ? "disabled" : ""}>Run posts scrape</button><span class="mute" id="pcost">${postCost()}</span></div>
+      ${S.last_posts ? `<div class="row" style="margin-top:10px"><span class="chip ok">last run: ${S.last_posts.posts} posts, ${S.last_posts.dropped.kept || 0} kept</span>${Object.entries(S.last_posts.dropped || {}).filter(([k, v]) => k !== "kept" && k !== "total" && v).map(([k, v]) => `<span class="chip">${esc(k)} ${v}</span>`).join("")}</div>` : ""}</div>`;
 }
 
 // ---------- 2 apollo ----------
@@ -351,6 +362,10 @@ document.addEventListener("click", async e => {
     const kws = $("#kw").value; S.keywords = kws; S.scrape = {loc: $("#loc").value, limit: +$("#lim").value || 300, date: $("#dp").value};
     return startedJob(await api("/api/scrape", {keywords: kws, location: S.scrape.loc, limit: S.scrape.limit, date_posted: S.scrape.date}), "scrape jobs");
   }
+  if (a === "scrapeposts") {
+    const q = $("#pq").value; S.postQueries = q; S.posts = {limit: +$("#pmax").value || 50, date: $("#pdp").value};
+    return startedJob(await api("/api/scrape_posts", {queries: q, max_posts: S.posts.limit, posted_limit: S.posts.date}), "scrape posts");
+  }
   if (a === "stage") {
     const all = [...new Set(matched().map(c => c.stage).filter(Boolean))], cur = S.icp.stages || all.filter(s => SEEDRE.test(s)), s = el.dataset.s;
     S.icp.stages = cur.includes(s) ? cur.filter(x => x !== s) : [...cur, s]; S.manual = {}; persistIcp(); persistSelection(); return render();
@@ -406,6 +421,8 @@ document.addEventListener("change", async e => {
 });
 document.addEventListener("input", e => {
   const t = e.target;
+  if (t.id === "pq") { S.postQueries = t.value; $("#pcost").textContent = postCost(); }
+  if (t.id === "pmax") { S.posts.limit = +t.value || 0; $("#pcost").textContent = postCost(); }
   if (t.id === "kw") { S.keywords = t.value; $("#cost").textContent = costText(); }
   if (t.id === "lim") { S.scrape.limit = +t.value || 0; $("#cost").textContent = costText(); }
   if (t.id === "csearch") { S.csearch = t.value; render(); }

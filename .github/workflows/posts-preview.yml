@@ -1,0 +1,26 @@
+name: Posts preview
+
+# Manual, READ-ONLY for Airtable. Spends about $0.002 per post on Apify (5 searches x per = about $0.20 at 20).
+on:
+  workflow_dispatch:
+    inputs:
+      per:
+        description: "Posts per search"
+        default: "20"
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID || 'appms9ERcB5Ws3r0w' }}
+      PER: ${{ inputs.per }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - run: python posts_preview.py --per "$PER"

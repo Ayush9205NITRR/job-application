@@ -449,3 +449,58 @@ def test_scrape_runs_keywords_in_parallel_and_survives_a_failure(monkeypatch):
     monkeypatch.setattr(pipeline, "request", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("down")))
     with pytest.raises(SystemExit):
         pipeline.scrape(["a", "b"], log=lambda *a: None)
+
+
+# ---- LinkedIn hiring posts (harvestapi/linkedin-post-search) ---------------------------------------------------
+def post(i, name="Acme Labs", slug="acme-labs", typ="company", text="We are hiring: Founder's Office Associate\n\nWork with the CEO on GTM.", url=None):
+    return {"type": "post", "id": str(i), "linkedinUrl": url or f"https://www.linkedin.com/posts/{slug}_hiring-activity-{i}", "content": text,
+            "author": {"type": typ, "name": name, "universalName": slug, "linkedinUrl": f"https://www.linkedin.com/company/{slug}/posts"},
+            "postedAt": {"date": "2026-10-17T12:10:38.109Z"}}
+
+
+def test_posts_to_jobs_keeps_only_company_posts_about_our_roles():
+    import pipeline
+    items = [post(1),                                                                                    # kept
+             post(2, typ="profile", name="Riya Shah", slug="riya"),                                      # a person: no company link
+             post(3, name="Dubai jobs, UAE", slug="dubai-jobs", text="#hiring Founder's Office manager"),  # job board
+             post(4, name="Beta", slug="beta", text="We are hiring a Graphic Designer"),                 # not our roles
+             post(5, name="Gamma", slug="gamma", text="Hiring: Executive Assistant to the CEO, strategy support"),  # assistant role
+             post(1),                                                                                    # duplicate id
+             post(6, name="Delta", slug="delta", text="Chief of Staff wanted"),                          # kept
+             {**post(7, name="Epsilon", slug="eps"), "author": {"type": "company", "name": "Epsilon", "universalName": "eps", "linkedinUrl": "https://www.linkedin.com/showcase/eps/posts"}},
+             {"id": "", "content": "x"}]
+    jobs, st = pipeline.posts_to_jobs(items)
+    assert [j["job_id"] for j in jobs] == ["post-1", "post-6"]
+    assert st == {"total": 9, "kept": 2, "person": 1, "job board or recruiter": 1, "not our roles": 1, "hard excluded": 1, "duplicate": 2, "showcase page": 1}
+    j = jobs[0]
+    assert j["company_url"] == "https://www.linkedin.com/company/acme-labs" and j["company"] == "Acme Labs"
+    assert j["title"] == "[Post] We are hiring: Founder's Office Associate" and j["job_url"].startswith("https://www.linkedin.com/posts/acme-labs")
+    assert j["posted"] == "2026-10-17T12:10:38.109Z"
+    assert pipeline.rules.group_by_company(jobs).keys() == {"https://www.linkedin.com/company/acme-labs", "https://www.linkedin.com/company/delta"}
+
+
+def test_scrape_posts_sends_one_run_with_all_queries(monkeypatch):
+    import pipeline
+    monkeypatch.setenv("APIFY_TOKEN", "t")
+    sent = {}
+
+    class R:
+        def json(self): return [{"id": "1"}, {"id": "2"}]
+    monkeypatch.setattr(pipeline, "request", lambda m, url, **kw: sent.update(url=url, body=kw["json"]) or R())
+    out = pipeline.scrape_posts(["a", "b"], 25, "week", log=lambda *a: None)
+    assert len(out) == 2 and "harvestapi~linkedin-post-search" in sent["url"]
+    assert sent["body"] == {"searchQueries": ["a", "b"], "maxPosts": 25, "postedLimit": "week", "sortBy": "date"}
+
+
+def test_scrape_posts_endpoint_validates_and_records_summary(srv, monkeypatch):
+    import pipeline
+    monkeypatch.setenv("APIFY_TOKEN", "t")
+    seen = {}
+    monkeypatch.setattr(pipeline, "scrape_posts", lambda qs, per, posted, sort, log=print: seen.update(qs=qs, per=per, posted=posted) or [{"id": "1"}] * 4)
+    monkeypatch.setattr(pipeline, "run_posts", lambda items, log=print: {"companies": 1, "jobs": 1, "new": 1, "posts": {"total": 4, "kept": 1, "person": 3}})
+    assert call(srv, "/api/scrape_posts", {"queries": ""})["_code"] == 400
+    assert call(srv, "/api/scrape_posts", {"queries": "hiring founder's office\nhiring chief of staff", "max_posts": 9999, "posted_limit": "bogus"})["started"] is True
+    wait_job()
+    assert seen == {"qs": ["hiring founder's office", "hiring chief of staff"], "per": 500, "posted": "month"}   # cap on cost, bad value ignored
+    st = call(srv, "/api/state")
+    assert st["last_posts"]["posts"] == 4 and st["last_posts"]["dropped"]["person"] == 3 and st["post_queries"].startswith("hiring founder's office")

@@ -39,6 +39,9 @@ DEFAULT_CLIENTS = ("Raphe\nMongo DB | MongoDB\nSprinto\nAnarock\nMyhq | myHQ\nAu
 DEFAULT_KEYWORDS = ("Founder's Office\nFounders Office Associate\nChief of Staff\nAssociate to the CEO\nBusiness Development Associate\n"
                     "Growth Associate\nStrategy and Operations Associate\nSales Strategy Associate")
 DATE_POSTED = {"pastWeek", "pastMonth", "anyTime", "past24Hours"}
+POSTED_LIMIT = {"24h", "week", "month", "3months", "any"}
+DEFAULT_POST_QUERIES = ("hiring founder's office\nhiring chief of staff\nhiring business development associate\n"
+                        "founder's office hiring startup\nwe are hiring associate to the CEO")
 
 
 # ---- persisted UI state (settings, selection, overlap results) -----------------------------------------------
@@ -58,6 +61,8 @@ def load_state():
     st.setdefault("inter", {})
     st.setdefault("last_scrape", None)
     st.setdefault("keywords", DEFAULT_KEYWORDS)
+    st.setdefault("post_queries", DEFAULT_POST_QUERIES)
+    st.setdefault("last_posts", None)
     st.setdefault("warn", "")
     return st
 
@@ -171,6 +176,7 @@ def api_state():
     return {"stats": {"sent_today": ob.sent_today(rows, now), "cap": ob.daily_cap(rows, now), "halted": ob.halted(rows), "counts": counts},
             "queue": [row_json(i, r) for i, r in enumerate(rows)], "icp": st["icp"], "clients": st["clients"],
             "selected": st["selected"], "keywords": st["keywords"], "last_scrape": st["last_scrape"], "warn": st["warn"],
+            "post_queries": st["post_queries"], "last_posts": st["last_posts"],
             "env": {"airtable": companies.airtable_ready(), "apify": bool(os.environ.get("APIFY_TOKEN")),
                     "gmail": bool(os.environ.get("GMAIL_USER") and os.environ.get("GMAIL_APP_PASSWORD"))}}
 
@@ -262,6 +268,25 @@ def post(path, body, raw, headers):
             companies.invalidate()
             update_state(last_scrape={"at": datetime.now(timezone.utc).isoformat(), "jobs": len(raw_jobs), **r})
         return {"started": run_job("scrape jobs", job)}
+    if path == "/api/scrape_posts":
+        qs = [k.strip() for k in str(body.get("queries", "")).splitlines() if k.strip()]
+        if not qs:
+            raise ApiError(400, "Add at least one search.")
+        if not os.environ.get("APIFY_TOKEN") or not companies.airtable_ready():
+            raise ApiError(400, "APIFY_TOKEN and the Airtable settings are needed for scraping.")
+        posted = body.get("posted_limit") if body.get("posted_limit") in POSTED_LIMIT else "month"
+        per = max(1, min(int(body.get("max_posts") or 50), 500))
+        update_state(post_queries="\n".join(qs))
+
+        def job():
+            import pipeline
+            from fo import airtable as at
+            at.DRY_RUN = False
+            items = pipeline.scrape_posts(qs, per, posted, "date", log=lambda *a: ob.log(*a))
+            r = pipeline.run_posts(items, log=lambda *a: ob.log(*a))
+            companies.invalidate()
+            update_state(last_posts={"at": datetime.now(timezone.utc).isoformat(), "posts": len(items), **{k: v for k, v in r.items() if k != "posts"}, "dropped": r["posts"]})
+        return {"started": run_job("scrape posts", job)}
     if path == "/api/apollo":      # step 1 of 2: look, do not write
         if not companies.airtable_ready():
             raise ApiError(400, "Airtable is not connected.")
