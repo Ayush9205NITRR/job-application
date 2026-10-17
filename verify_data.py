@@ -59,6 +59,11 @@ def roundtrip(comps):
     return {"rows": len(lines) - 1, "matched": len(matches), "by_linkedin": sum(1 for m in matches if m[2] == "linkedin"), "unmatched": len(unmatched)}
 
 
+def listing(comps):
+    """One line per company: slug | name | website domain | status. Company facts only, nothing secret."""
+    return [f"{slug(c.get('Company LinkedIn URL')) or '-'}|{(c.get('Company') or '').replace('|', ' ')}|{domain_of(c.get('Website')) or '-'}|{c.get('Status') or '-'}" for c in comps]
+
+
 def report(f, r, rt):
     n = r["companies"] or 1
     pct = lambda k: f"{r[k]} ({100 * r[k] // n}%)"
@@ -87,12 +92,15 @@ def report(f, r, rt):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base")
+    ap.add_argument("--list", action="store_true", help="also print slug|name|website|status for every company")
     a = ap.parse_args()
     if a.base:
         os.environ["AIRTABLE_BASE_ID"] = a.base
     import companies
     comps = companies.fetch()
     text = report(None, analyse(comps), roundtrip(comps))
+    if a.list:
+        print("COMPANIES-BEGIN\n" + "\n".join(listing(comps)) + "\nCOMPANIES-END")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a") as f:

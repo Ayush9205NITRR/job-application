@@ -358,3 +358,9 @@ def test_verify_data_analyse_and_roundtrip():
     assert rt == {"rows": 3, "matched": 3, "by_linkedin": 3, "unmatched": 0}                 # http/https, upper case, ?trk, trailing slash all match
     text = v.report(None, r, rt)
     assert "numeric LinkedIn id" in text and "no Apollo data yet" in text
+
+
+def test_verify_listing_lines():
+    import verify_data as v
+    out = v.listing([{"Company": "A|B", "Company LinkedIn URL": "https://www.linkedin.com/company/ab", "Website": "https://www.ab.io/x", "Status": "Excluded"}, {"Company": "N"}])
+    assert out == ["ab|A B|ab.io|Excluded", "-|N|-|-"]

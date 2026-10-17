@@ -7,6 +7,10 @@ on:
       base_id:
         description: "Airtable base to check"
         default: "appms9ERcB5Ws3r0w"
+      list_companies:
+        description: "Also print every company (slug, name, website, status)"
+        type: boolean
+        default: false
 
 jobs:
   verify:
@@ -15,10 +19,11 @@ jobs:
     env:
       AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
       BASE: ${{ inputs.base_id }}
+      LIST: ${{ inputs.list_companies && '--list' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install requests python-dotenv
-      - run: python verify_data.py --base "$BASE"
+      - run: python verify_data.py --base "$BASE" $LIST
