@@ -207,14 +207,33 @@ function view1() {
 }
 
 // ---------- 2 apollo ----------
+function health() {
+  const cs = S.companies || [], n = cs.length;
+  if (!n) return "";
+  const c = f => cs.filter(f).length, m = c(x => x.matched);
+  const items = [["companies", n], ["LinkedIn link", c(x => x.li)], ["website", c(x => x.website)], ["with a job", c(x => x.jobs.length)], ["Apollo data", m], ["ICP match", c(x => x.matched && icpPass(x))]];
+  const hint = !m ? "No Apollo data yet. The ICP filter needs funding stage and employees from the Apollo CSV." : (c(x => x.website) < n / 2 ? "Few companies have a website. The overlap check needs one; the Apollo Website column fills it when you save." : "");
+  return `<div class="card"><b>Your data right now</b><div class="row" style="margin-top:6px">${items.map(([k, v]) => `<span class="chip ${v ? "" : "bad"}">${k} <b>${v}</b></span>`).join("")}</div>${hint ? `<p class="mute" style="margin:8px 0 0">${hint}</p>` : ""}</div>`;
+}
+function previewCard(p) {
+  const miss = Object.entries(p.fields_found).filter(([, v]) => !v).map(([k]) => k);
+  return `<div class="card"><div class="row"><b>Preview, nothing is saved yet</b><span class="grow"></span><button class="btn" data-act="apollo-discard">Discard</button><button class="btn pri" data-act="apollo-commit" ${p.matched ? "" : "disabled"}>Looks right, save to Airtable</button></div>
+    ${p.matched ? "" : '<div class="note bad" style="margin-top:10px">Nothing matched. The file needs <b>Company Linkedin Url</b> (best) or <b>Website</b> or the exact company name.</div>'}
+    ${miss.length ? `<div class="note warn" style="margin-top:10px">Column not found in the file: <b>${miss.map(esc).join(", ")}</b>. Check the header names (Funding, Funding Stage, Revenue, Employees).</div>` : ""}
+    <div class="row" style="margin:10px 0"><span class="chip">${p.csv_rows} rows in file</span><span class="chip">${p.apollo} companies</span><span class="chip ok">${p.matched} matched</span>
+      ${Object.entries(p.methods).map(([k, v]) => `<span class="chip">via ${esc(k)} ${v}</span>`).join("")}<span class="chip ${p.unmatched ? "warn" : ""}">${p.unmatched} not in your ${p.airtable_companies} scraped</span><span class="chip ok">${p.icp} fit the ICP</span></div>
+    <div class="row" style="margin-bottom:8px">${Object.entries(p.fields_found).map(([k, v]) => `<span class="chip ${v ? "ok" : "bad"}">${esc(k)}: ${v}/${p.apollo}</span>`).join("")}</div>
+    <div style="max-height:320px;overflow:auto"><table><tr><th>Apollo company</th><th>Matched to</th><th>How</th><th>Stage</th><th>Funding</th><th>Revenue</th><th>Emp.</th><th>ICP</th></tr>
+    ${p.rows.slice(0, 40).map(r => `<tr class="${r.icp ? "hi" : ""}"><td>${esc(r.apollo)}</td><td>${esc(r.company)}</td><td>${esc(r.method)}</td><td>${esc(r.stage)}</td><td class="num">${esc(r.funding)}</td><td class="num">${esc(r.revenue)}</td><td class="num">${esc(r.employees)}</td><td>${r.icp ? "yes" : "no"} <small>${esc(r.why)}</small></td></tr>`).join("")}</table></div>
+    ${p.unmatched_sample.length ? `<p class="mute" style="margin:10px 0 0">Not found in your scrape (first ${p.unmatched_sample.length}): ${p.unmatched_sample.map(esc).join(", ")}</p>` : ""}</div>`;
+}
 function view2() {
   const r = S.apolloResult, m = matched();
-  return head("2. Apollo account CSV", "Export your Apollo companies with these columns: <b>Company Linkedin Url</b> (or Website / name), <b>Funding</b>, <b>Funding Stage</b>, <b>Revenue</b>, <b>Employees</b>. Each row is matched to the scraped companies.") +
+  return head("2. Apollo account CSV", "Export your Apollo companies with: <b>Company Linkedin Url</b> (or Website / name), <b>Funding</b>, <b>Funding Stage</b>, <b>Revenue</b>, <b>Employees</b>. You see a preview first, nothing is written until you confirm.") + health() +
     `<div class="card"><div class="drop" id="drop2" data-act="choose" data-target="file2"><b>Drop the Apollo CSV here</b> or click to choose<input id="file2" type="file" accept=".csv" hidden></div>
-      ${r ? `<div class="note ok" style="margin-top:12px">${r.apollo} Apollo companies: <b>${r.matched} matched</b> ${Object.entries(r.methods || {}).map(([k, v]) => `<span class="chip">${esc(k)} ${v}</span>`).join("")}, ${r.unmatched} not in your scrape (they are ignored).</div>` : ""}</div>` +
-    (m.length ? `<div class="card"><div class="row"><b>${m.length} companies have Apollo data</b><span class="grow"></span><button class="btn pri" data-act="go" data-n="3">Next: ICP and overlap</button></div>
-      <table style="margin-top:8px"><tr><th>Company</th><th>Stage</th><th>Funding</th><th>Revenue</th><th>Employees</th></tr>${m.slice(0, 8).map(c => `<tr><td>${esc(c.name)}</td><td>${esc(c.stage)}</td><td class="num">${esc(c.funding)}</td><td class="num">${esc(c.revenue)}</td><td class="num">${esc(c.employees)}</td></tr>`).join("")}</table>
-      ${m.length > 8 ? `<p class="mute">and ${m.length - 8} more</p>` : ""}</div>` : "");
+      ${r ? `<div class="note ok" style="margin-top:12px">Saved: ${r.apollo} Apollo companies, <b>${r.matched} matched</b> ${Object.entries(r.methods || {}).map(([k, v]) => `<span class="chip">${esc(k)} ${v}</span>`).join("")}</div>` : ""}</div>` +
+    (S.apolloPreview ? previewCard(S.apolloPreview) : "") +
+    (m.length && !S.apolloPreview ? `<div class="card"><div class="row"><b>${m.length} companies have Apollo data</b><span class="grow"></span><button class="btn pri" data-act="go" data-n="3">Next: ICP and overlap</button></div></div>` : "");
 }
 
 // ---------- 3 icp + overlap ----------
@@ -334,6 +353,12 @@ document.addEventListener("click", async e => {
     return toast(`${r.blocks} calendar blocks downloaded. Open the file once to add them.`);
   }
   if (a === "applied") { if (!confirm("Mark the ticked companies and their jobs as applied?")) return; const r = await api("/api/applied", {ids: selectedList().map(c => c.id)}); await loadCompanies(true); toast(`${r.n} marked applied`); return render(); }
+  if (a === "apollo-discard") { await api("/api/apollo/discard", {}); S.apolloPreview = null; return render(); }
+  if (a === "apollo-commit") {
+    el.disabled = true; el.textContent = "Saving to Airtable...";
+    try { S.apolloResult = await api("/api/apollo/commit", {}); S.apolloPreview = null; S.manual = {}; await loadCompanies(true); toast("Saved to Airtable"); go(3); } catch { render(); }
+    return;
+  }
   if (a === "ver") { S.verified = el.dataset.v; return render(); }
   if (a === "copyneed") { const need = selectedList().filter(c => !new Set(S.queue.map(x => x.company)).has(c.name)); await navigator.clipboard.writeText(need.map(c => c.li).join("\n")); return toast("Copied"); }
   if (a === "qf") { S.qfilter = el.dataset.t; S.focus = 0; return render(); }
@@ -380,8 +405,8 @@ for (const ev of ["dragover", "dragleave", "drop"]) document.addEventListener(ev
   if (ev === "drop" && e.dataTransfer.files[0]) d.id === "drop2" ? uploadApollo(e.dataTransfer.files[0]) : uploadContacts(e.dataTransfer.files[0]);
 });
 async function uploadApollo(f) {
-  const d = $("#drop2"); if (d) d.innerHTML = '<span class="spin" style="border-color:var(--acc);border-right-color:transparent"></span> Matching ' + esc(f.name) + "...";
-  try { S.apolloResult = await api("/api/apollo", undefined, {raw: f}); await loadCompanies(true); S.manual = {}; toast("Matched"); } catch {}
+  const d = $("#drop2"); if (d) d.innerHTML = '<span class="spin" style="border-color:var(--acc);border-right-color:transparent"></span> Reading ' + esc(f.name) + "...";
+  try { S.apolloPreview = await api("/api/apollo", undefined, {raw: f}); S.apolloResult = null; } catch {}
   render();
 }
 async function uploadContacts(f) {

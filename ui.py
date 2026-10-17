@@ -31,6 +31,7 @@ JOB = {"id": 0, "name": "", "running": False, "log": [], "done": 0, "total": 0, 
 JOB_LOCK = threading.Lock()
 QLOCK = threading.RLock()      # queue.csv read-modify-write
 SLOCK = threading.RLock()      # ui_state.json
+PENDING = {}                   # previewed Apollo CSV waiting for 'Save to Airtable' (memory only, never on disk)
 
 DEFAULT_ICP = {"stages": None, "emp_min": 2, "emp_max": 50, "rev_max": None, "funding_max": None}
 DEFAULT_CLIENTS = ("Raphe\nMongo DB | MongoDB\nSprinto\nAnarock\nMyhq | myHQ\nAugmont\nMaruti RND | Maruti R&D\nClueso\n"
@@ -258,18 +259,35 @@ def post(path, body, raw, headers):
             companies.invalidate()
             update_state(last_scrape={"at": datetime.now(timezone.utc).isoformat(), "jobs": len(raw_jobs), **r})
         return {"started": run_job("scrape jobs", job)}
-    if path == "/api/apollo":
+    if path == "/api/apollo":      # step 1 of 2: look, do not write
         if not companies.airtable_ready():
             raise ApiError(400, "Airtable is not connected.")
         csv_path = tmp_csv(raw)
         try:
-            r = companies.import_apollo_companies(csv_path)
+            r = companies.preview_apollo(csv_path)
         except Exception as e:
-            raise ApiError(400, f"Could not match that file: {e}")
+            raise ApiError(400, f"Could not read that file: {e}")
         finally:
             os.unlink(csv_path)
+        PENDING["apollo"] = raw
+        return r
+    if path == "/api/apollo/commit":   # step 2 of 2: write the previewed file into Airtable
+        raw = PENDING.get("apollo")
+        if not raw:
+            raise ApiError(400, "Nothing to save. Upload the Apollo CSV again.")
+        csv_path = tmp_csv(raw)
+        try:
+            r = companies.import_apollo_companies(csv_path)
+        except Exception as e:
+            raise ApiError(400, f"Could not save to Airtable: {e}")
+        finally:
+            os.unlink(csv_path)
+        PENDING.pop("apollo", None)
         companies.invalidate()
         return r
+    if path == "/api/apollo/discard":
+        PENDING.pop("apollo", None)
+        return {"ok": True}
     if path == "/api/intersect":
         ids = body.get("ids", [])
         comps = [c for c in selected_comps(ids)]

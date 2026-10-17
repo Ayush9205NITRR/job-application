@@ -110,6 +110,28 @@ def import_apollo_companies(path):
     return {"apollo": len(apollo), "matched": len(matches), "unmatched": len(unmatched), "methods": methods}
 
 
+def preview_apollo(path, comps=None):
+    """Match an Apollo CSV onto the Airtable companies WITHOUT writing anything. Shows what would happen:
+    match counts per method, which of the 4 parameters were found, ICP count, a sample of matches and misses."""
+    import apollo_to_airtable as a
+    comps = comps if comps is not None else get()
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        csv_rows = sum(1 for _ in csv.DictReader(f))
+    apollo = a.load_apollo(path)
+    matches, unmatched = a.match(apollo, comps)
+    methods, rows = {}, []
+    for row, ap, method in matches:
+        methods[method] = methods.get(method, 0) + 1
+        ok, why = icp({"Funding stage": ap.get("Funding stage", ""), "Employees (Apollo)": ap.get("Employees (Apollo)", "")})
+        rows.append({"apollo": ap["name"], "company": row.get("Company") or "", "method": method, "stage": ap.get("Funding stage", ""),
+                     "funding": ap.get("Total funding", ""), "revenue": ap.get("Annual revenue (Apollo)", ""),
+                     "employees": ap.get("Employees (Apollo)", ""), "icp": ok, "why": why})
+    fields = {k: sum(1 for ap in apollo.values() if ap.get(k)) for k in ("Funding stage", "Total funding", "Annual revenue (Apollo)", "Employees (Apollo)")}
+    return {"csv_rows": csv_rows, "apollo": len(apollo), "matched": len(matches), "unmatched": len(unmatched), "methods": methods,
+            "icp": sum(1 for r in rows if r["icp"]), "fields_found": fields, "airtable_companies": len(comps),
+            "rows": sorted(rows, key=lambda r: (not r["icp"], r["company"]))[:60], "unmatched_sample": [u["name"] or u.get("li") or "?" for u in unmatched[:15]]}
+
+
 def save_shortlist(selected, shown):
     """Tick = Shortlist true and Status Shortlisted. Only rows in `shown` are touched."""
     from fo import airtable as at

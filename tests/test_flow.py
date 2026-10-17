@@ -302,9 +302,35 @@ def test_ics_endpoint(srv):
     assert call(srv, "/api/ics", {"ids": []})["_code"] == 400
 
 
-def test_apollo_endpoint_uses_matcher(srv, monkeypatch):
-    monkeypatch.setattr(co, "import_apollo_companies", lambda path: {"apollo": 3, "matched": 2, "unmatched": 1, "methods": {"linkedin": 2}})
-    assert call(srv, "/api/apollo", raw=b"Company Name\nX\n")["matched"] == 2
+def test_apollo_preview_writes_nothing_then_commit_writes(srv, monkeypatch, tmp_path):
+    wrote = []
+    monkeypatch.setattr(co, "import_apollo_companies", lambda path: wrote.append(open(path).read()) or {"apollo": 2, "matched": 2, "unmatched": 0, "methods": {"linkedin": 2}})
+    csv = (b"Company Name,Company Linkedin Url,Funding Stage,Funding,Revenue,# Employees\n"
+           b"Acme,http://www.linkedin.com/company/acme/,Seed,$2M,$1M,12\nBeta,https://linkedin.com/company/Beta-Labs,Series B,$40M,$20M,300\nGhost,https://linkedin.com/company/ghost,Seed,,,5\n")
+    p = call(srv, "/api/apollo", raw=csv)
+    assert (p["csv_rows"], p["apollo"], p["unmatched"], p["airtable_companies"]) == (3, 3, 2, 2)   # Acme matches the cached company by LinkedIn slug, the other two do not
+    assert wrote == []                                                                              # preview never saves
+    assert call(srv, "/api/apollo/commit", {})["matched"] == 2 and wrote and "Acme" in wrote[0]
+    assert call(srv, "/api/apollo/commit", {})["_code"] == 400                                      # nothing pending any more
+    call(srv, "/api/apollo", raw=csv)
+    assert call(srv, "/api/apollo/discard", {})["ok"] and call(srv, "/api/apollo/commit", {})["_code"] == 400
+
+
+def test_preview_apollo_matches_icp_and_reports_missing_columns(tmp_path):
+    comps = [{"_id": "r1", "Company": "Acme Pvt Ltd", "Company LinkedIn URL": "https://www.linkedin.com/company/acme"},
+             {"_id": "r2", "Company": "Beta", "Company LinkedIn URL": "https://www.linkedin.com/company/beta-labs"},
+             {"_id": "r3", "Company": "Gamma", "Company LinkedIn URL": "https://www.linkedin.com/company/gamma", "Website": "https://gamma.io"}]
+    f = tmp_path / "a.csv"
+    f.write_text("Company Name,Company Linkedin Url,Website,Funding Stage,Funding,# Employees\n"
+                 "Acme,http://www.linkedin.com/company/ACME/?trk=x,,Seed,$2M,12\n"
+                 "Beta,https://linkedin.com/company/beta-labs,,Series B,$40M,300\n"
+                 "Gamma Inc,,https://www.gamma.io/about,Pre Seed,$1M,6\n"
+                 "Ghost,https://linkedin.com/company/ghost,,Seed,,5\n")
+    p = co.preview_apollo(f, comps)
+    assert (p["apollo"], p["matched"], p["unmatched"], p["icp"]) == (4, 3, 1, 2)
+    assert p["methods"] == {"linkedin": 2, "domain": 1} and p["unmatched_sample"] == ["Ghost"]
+    assert p["fields_found"]["Annual revenue (Apollo)"] == 0 and p["fields_found"]["Funding stage"] == 4     # revenue column absent: flagged
+    assert [r["company"] for r in p["rows"]][:2] in (["Acme Pvt Ltd", "Gamma"], ["Gamma", "Acme Pvt Ltd"]) and p["rows"][-1]["icp"] is False
 
 
 def test_scrape_job_runs_pipeline_and_records_summary(srv, monkeypatch):
@@ -317,3 +343,18 @@ def test_scrape_job_runs_pipeline_and_records_summary(srv, monkeypatch):
     st = call(srv, "/api/state")
     assert st["last_scrape"]["jobs"] == 3 and st["keywords"].startswith("Founder's Office")
     assert call(srv, "/api/scrape", {"keywords": ""})["_code"] == 400
+
+
+def test_verify_data_analyse_and_roundtrip():
+    import verify_data as v
+    comps = [{"_id": "1", "Company": "Acme", "Company LinkedIn URL": "https://www.linkedin.com/company/acme", "Status": "Needs review", "jobs": [{}], "Website": "https://acme.io"},
+             {"_id": "2", "Company": "Beta", "Company LinkedIn URL": "https://www.linkedin.com/company/12345", "Status": "Excluded", "jobs": []},
+             {"_id": "3", "Company": "Gamma", "Company LinkedIn URL": "https://www.linkedin.com/company/gamma", "jobs": [{}, {}]},
+             {"_id": "4", "Company": "No Url", "jobs": []}]
+    r = v.analyse(comps)
+    assert (r["companies"], r["jobs"], r["no_job"], r["valid_slug"], r["numeric_slug"], r["website"]) == (4, 3, 2, 3, 1, 1)
+    assert r["status"] == {"Needs review": 1, "Excluded": 1, "(blank)": 2}
+    rt = v.roundtrip(comps)
+    assert rt == {"rows": 3, "matched": 3, "by_linkedin": 3, "unmatched": 0}                 # http/https, upper case, ?trk, trailing slash all match
+    text = v.report(None, r, rt)
+    assert "numeric LinkedIn id" in text and "no Apollo data yet" in text

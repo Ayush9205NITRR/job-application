@@ -1,0 +1,24 @@
+name: Verify data
+
+# Manual and READ-ONLY. Checks the companies and jobs in Airtable and tests the Apollo matcher on them. Writes nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      base_id:
+        description: "Airtable base to check"
+        default: "appms9ERcB5Ws3r0w"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      BASE: ${{ inputs.base_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - run: python verify_data.py --base "$BASE"
