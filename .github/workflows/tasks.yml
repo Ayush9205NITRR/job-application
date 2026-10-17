@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 10
     env:
       AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
-      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID || 'appms9ERcB5Ws3r0w' }}
+      AIRTABLE_BASE_ID: appms9ERcB5Ws3r0w  # pinned: the AIRTABLE_BASE_ID secret still points at the OLD base
       CMD: ${{ inputs.cmd }}
       ARGS: ${{ inputs.args }}
     steps:
