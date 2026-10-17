@@ -40,3 +40,11 @@ def test_auto_shortlist_ticks_only_early_stage_verified_companies():
     assert emails.auto_shortlist([ok, big, unverified, excluded], upd.extend) == 1 and upd == [("a", {"Shortlist": True})]
     n, rows, _ = run([person("p1")], [dict(CO, Shortlist=False, **{"Apollo match": "agent", "Funding stage": "Seed", "Employees (Apollo)": "10"})])
     assert n == 0  # build() only shortlists when asked to
+
+
+def test_taskplan_round_calls_build_with_a_real_argument_name():
+    import inspect
+    import re
+    src = open("taskplan.py").read()
+    kw = re.search(r"emails\.build\((\w+)=", src).group(1)
+    assert kw in inspect.signature(emails.build).parameters

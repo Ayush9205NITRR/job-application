@@ -125,7 +125,7 @@ def main():
         print("requeued", T.requeue_stale())
         print("applied", T.apply_done())
         print("PLAN", plan(arg("--max", 10), arg("--cap", 100)))
-        print("EMAILS built", emails.build(auto_shortlist=True))
+        print("EMAILS built", emails.build(auto_shortlist_on=True))
         print("STATS", json.dumps(stats(), indent=1))
     elif cmd == "cycle":
         print("requeued", T.requeue_stale())
