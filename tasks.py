@@ -317,25 +317,17 @@ def seed_dm(names, tasks=None, companies=None):
 
 
 def reopen(names, tasks=None):
-    """Put finished (even Applied) tasks back to Open (clears Result, Confidence, Started at) so the agent redoes them. Match by company name substring."""
+    """Put finished (even Applied) tasks back to Open (clears Result, Confidence, Started at) so the agent redoes them.
+    Each name is a company substring, optionally `substring@type` to reopen only that task type."""
     tasks, n = tasks or Tasks, 0
+    wanted = [(x.split("@")[0].lower(), (x.split("@") + [""])[1]) for x in names]
     for t in tasks.all():
-        if t.get("Status") in ("Done", "Applied", "Failed", "Needs human") and any(x.lower() in (t.get("Company") or "").lower() for x in names):
+        if t.get("Status") not in ("Done", "Applied", "Failed", "Needs human"):
+            continue
+        if any(sub in (t.get("Company") or "").lower() and (not typ or typ == t.get("Type")) for sub, typ in wanted):
             tasks.update([(t["_id"], {"Status": "Open", "Result": "", "Confidence": None, "Started at": None, "Note": "reopened for a rerun"})])
             n += 1
     return n
-
-
-CONTACT_FIELDS = [
-    {"name": "Email", "type": "singleLineText"}, {"name": "First name", "type": "singleLineText"},
-    {"name": "Last name", "type": "singleLineText"}, {"name": "Title", "type": "singleLineText"},
-    {"name": "LinkedIn URL", "type": "url"},
-    {"name": "Contact type", "type": "singleSelect", "options": {"choices": [{"name": r} for r in (*ROLES, "Job poster")]}},
-    {"name": "Stage", "type": "singleSelect", "options": {"choices": [{"name": s} for s in ("New", "Drafted", "Approved", "Sent", "Replied", "Do not contact")]}},
-    {"name": "Email status", "type": "singleSelect", "options": {"choices": [{"name": s} for s in EMAIL_STATUS]}},
-]
-COMPANY_FIELDS = [{"name": n, "type": "singleLineText"} for n in
-                  ("Funding stage", "Total funding", "Annual revenue (Apollo)", "Employees (Apollo)", "Apollo match")]
 
 
 def setup():

@@ -168,3 +168,10 @@ def test_decision_maker_email_is_checked_and_saved():
     for bad in ({"name": "X", "role": "HR", "email": "not-an-email"}, {"name": "X", "role": "HR", "email": "a@b.io", "email_status": "great"}):
         out, task, *_ = run(done("pick_decision_makers", {"people": [bad]}))
         assert out["Failed"] == 1, task["Note"]
+
+
+def test_reopen_can_target_one_task_type():
+    t = Fake([{"_id": "t1", "Company": "Voyaah", "Type": "classify_post", "Status": "Applied"},
+              {"_id": "t2", "Company": "Voyaah", "Type": "pick_decision_makers", "Status": "Done"}])
+    assert tasks.reopen(["voyaah@pick_decision_makers"], t) == 1
+    assert [r["Status"] for r in t.rows] == ["Applied", "Open"]
