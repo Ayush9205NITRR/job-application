@@ -89,3 +89,17 @@ def test_seed_picks_named_post_companies_once():
     assert sorted(tasks.seed_classify_post(["nextdimension", "sabihr", "old co"], tasks=t, companies=comps, jobs=jobs)) == ["NextDimension AI", "SabiHR"]
     assert tasks.seed_classify_post(["nextdimension"], tasks=t, companies=comps, jobs=jobs) == []
     assert json.loads(t.rows[0]["Input"])["post"] in ("hiring FO", "hiring BD")
+
+
+def test_services_firm_and_reason():
+    _, task, comp, _ = run(done("classify_post", {"kind": "services_firm", "reason": "IT consultancy hiring for itself"}))
+    assert comp["Status"] == "Excluded" and "IT consultancy" in task["Note"]
+    out, task, *_ = run(done("classify_post", {"kind": "maybe"}))
+    assert out["Failed"] == 1
+
+
+def test_reopen_clears_old_answer():
+    t = Fake([{"_id": "t1", "Company": "Aelum Consulting", "Status": "Done", "Result": "{}", "Confidence": "High", "Started at": "x"},
+              {"_id": "t2", "Company": "SabiHR", "Status": "Done", "Result": "{}"}])
+    assert tasks.reopen(["aelum"], t) == 1
+    assert t.rows[0]["Status"] == "Open" and t.rows[0]["Result"] == "" and t.rows[1]["Status"] == "Done"

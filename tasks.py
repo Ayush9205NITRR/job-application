@@ -71,8 +71,15 @@ def check_pick_decision_makers(r):
     return None
 
 
+KINDS = ("startup", "recruiter", "services_firm", "other")
+
+
 def check_classify_post(r):
-    return None if r.get("kind") in ("startup", "recruiter", "other") else "kind must be startup, recruiter or other"
+    if r.get("kind") not in KINDS:
+        return f"kind must be one of {KINDS}"
+    if not isinstance(r.get("reason", ""), str):
+        return "reason must be text"
+    return None
 
 
 CHECKS = {"verify_company": check_verify_company, "pick_decision_makers": check_pick_decision_makers, "classify_post": check_classify_post}
@@ -104,9 +111,9 @@ def apply_pick_decision_makers(task, r, tables):
 
 
 def apply_classify_post(task, r, tables):
-    status = {"startup": "Needs review", "recruiter": "Excluded", "other": "Excluded"}[r["kind"]]
+    status = {"startup": "Needs review", "recruiter": "Excluded", "services_firm": "Excluded", "other": "Excluded"}[r["kind"]]
     tables["Companies"].update([(task["Company record"], {"Status": status})])
-    return f"post is {r['kind']}, company set to {status}"
+    return f"post is {r['kind']}, company set to {status}" + (f" ({r['reason'][:120]})" if r.get("reason") else "")
 
 
 APPLY = {"verify_company": apply_verify_company, "pick_decision_makers": apply_pick_decision_makers, "classify_post": apply_classify_post}
@@ -192,7 +199,7 @@ def where():
             print(f"  {n}: {len(at.Table(n).all())} rows")
 
 
-EXPECTED = {"nextdimension": "startup", "taskforge": "startup", "sabihr": "recruiter", "aelum": "recruiter", "desklee": "other"}
+EXPECTED = {"nextdimension": "startup", "taskforge": "startup", "sabihr": "recruiter", "aelum": "services_firm", "desklee": "other"}
 
 
 def show():
@@ -217,6 +224,16 @@ def show():
     print(f"MATCH {right}/{total}")
 
 
+def reopen(names, tasks=None):
+    """Put finished tasks back to Open (clears Result, Confidence, Started at) so the agent redoes them. Match by company name substring."""
+    tasks, n = tasks or Tasks, 0
+    for t in tasks.all():
+        if t.get("Status") in ("Done", "Failed", "Needs human") and any(x.lower() in (t.get("Company") or "").lower() for x in names):
+            tasks.update([(t["_id"], {"Status": "Open", "Result": "", "Confidence": None, "Started at": None, "Note": "reopened for a rerun"})])
+            n += 1
+    return n
+
+
 def setup():
     meta = f"https://api.airtable.com/v0/meta/bases/{base_id()}/tables"
     have = {t["name"] for t in request("GET", meta, headers=_headers()).json()["tables"]}
@@ -229,4 +246,4 @@ def setup():
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    {"setup": setup, "where": where, "show": show, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
+    {"setup": setup, "reopen": lambda: print("reopened", reopen([x.strip() for x in sys.argv[2].split("|") if x.strip()])), "where": where, "show": show, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
