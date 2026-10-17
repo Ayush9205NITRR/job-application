@@ -1,0 +1,25 @@
+name: Move posts to working base
+
+# Copies the post-sourced companies from the OLD base into the working base. Create-only; the old base is only read.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (only count)"
+        type: boolean
+        default: true
+
+jobs:
+  move:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: appms9ERcB5Ws3r0w
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - run: python move_posts.py ${{ inputs.dry_run && '--dry-run' || '' }}
