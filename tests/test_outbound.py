@@ -395,3 +395,30 @@ def test_check_explains_dropped_connection(monkeypatch):
     with pytest.raises(SystemExit) as e:
         ob.cmd_check()
     assert "Critical security alert" in str(e.value) and "SMTPServerDisconnected" in str(e.value)
+
+
+def test_env_command_shows_names_and_lengths_never_values(monkeypatch, capsys):
+    for k in ("GMAIL_USER", "GMAIL_APP_PASSWORD", "AIRTABLE_TOKEN", "AIRTABLE_BASE_ID", "APIFY_TOKEN"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("GMAIL_USER", "me@gmail.com")
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "supersecretvalue1")
+    monkeypatch.setenv("CODESPACES", "true")
+    missing = ob.cmd_env()
+    out = capsys.readouterr().out
+    assert missing == ["AIRTABLE_TOKEN", "AIRTABLE_BASE_ID", "APIFY_TOKEN"]
+    assert "supersecretvalue1" not in out and "me@gmail.com" not in out and "17 chars" in out
+    assert "Stop Current Codespace" in out and "MISSING  AIRTABLE_TOKEN" in out
+
+
+def test_env_command_reports_dotenv_source(tmp_path, monkeypatch, capsys):
+    f = tmp_path / ".env"
+    f.write_text("AIRTABLE_TOKEN=abc123\n")
+    monkeypatch.delenv("AIRTABLE_TOKEN", raising=False)
+    monkeypatch.delenv("CODESPACES", raising=False)
+    ob.FROM_DOTENV.discard("AIRTABLE_TOKEN")
+    ob.load_dotenv(f)
+    ob.cmd_env()
+    assert "AIRTABLE_TOKEN" in capsys.readouterr().out
+    assert "AIRTABLE_TOKEN" in ob.FROM_DOTENV
+    monkeypatch.delenv("AIRTABLE_TOKEN")
+    ob.FROM_DOTENV.discard("AIRTABLE_TOKEN")

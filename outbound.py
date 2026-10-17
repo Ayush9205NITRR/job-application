@@ -64,6 +64,9 @@ EXCLUDE = re.compile(r"\bMICE\b|event (management|planning|company|agency)|event
 
 
 # ---- .env (stdlib): KEY=VALUE lines. Real environment variables win over the file. ------------------
+FROM_DOTENV = set()   # names that came from the .env file (not from the real environment)
+
+
 def load_dotenv(path=None):
     path = Path(path or os.environ.get("OUTBOUND_ENV") or Path(__file__).resolve().parent / ".env")
     if not path.is_file():
@@ -76,6 +79,7 @@ def load_dotenv(path=None):
         k, v = k.strip().removeprefix("export ").strip(), v.strip().strip("\"'")
         if k and k not in os.environ:
             os.environ[k] = v
+            FROM_DOTENV.add(k)
 
 
 load_dotenv()
@@ -267,6 +271,33 @@ def imap_connect():
     m = imaplib.IMAP4_SSL("imap.gmail.com")
     m.login(u, p)
     return m
+
+
+ENV_NAMES = [("GMAIL_USER", "sending"), ("GMAIL_APP_PASSWORD", "sending"), ("AIRTABLE_TOKEN", "Airtable"),
+             ("AIRTABLE_BASE_ID", "Airtable"), ("APIFY_TOKEN", "scraping")]
+
+
+def cmd_env():
+    """Which secrets does this process see? Names and lengths only, never the values."""
+    in_codespace = bool(os.environ.get("CODESPACES"))
+    missing = []
+    for name, used_for in ENV_NAMES:
+        v = os.environ.get(name, "")
+        if v:
+            src = ".env file" if name in FROM_DOTENV else ("Codespaces secret / environment" if in_codespace else "environment")
+            print(f"  ok       {name:20} {len(v):3} chars   from {src}   (needed for {used_for})")
+        else:
+            missing.append(name)
+            print(f"  MISSING  {name:20}                  (needed for {used_for})")
+    if missing and in_codespace:
+        print("\nIn a Codespace, secrets are read only when the Codespace STARTS. If you added them after it was created or while it was running:\n"
+              "  1. github.com/settings/codespaces: each secret's 'Repository access' must include this repo, names must match exactly.\n"
+              "  2. Stop the codespace (Ctrl+Shift+P, 'Codespaces: Stop Current Codespace') and open it again from github.com/codespaces.\n"
+              "  3. Open a NEW terminal (old ones keep the old environment) and run this command again.\n"
+              "Quick workaround: put the values in a .env file here (it is gitignored and never leaves this codespace).")
+    elif missing:
+        print("\nSet the missing ones in .env or export them, then run this again.")
+    return missing
 
 
 def cmd_check():
@@ -618,6 +649,7 @@ def main(argv=None):
         sub.add_parser(name).add_argument("--dry", action="store_true")
     sub.add_parser("wa")
     sub.add_parser("check")
+    sub.add_parser("env")
     a = ap.parse_args(argv)
     if a.cmd == "draft":
         draft(a.csv)
@@ -625,6 +657,8 @@ def main(argv=None):
         cmd_wa()
     elif a.cmd == "check":
         cmd_check()
+    elif a.cmd == "env":
+        cmd_env()
     else:
         {"send": cmd_send, "followup": cmd_followup, "notify": cmd_notify, "inbox": cmd_inbox, "cycle": cmd_cycle}[a.cmd](a.dry)
 

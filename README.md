@@ -28,6 +28,11 @@ Upload the Apollo CSV, relevant rows are drafted automatically, edit the opening
 "Send approved + follow-ups". Local only (127.0.0.1), the upload is deleted after reading, nothing sends without
 approval. Do not run the UI and the cron `cycle` at the same moment (both write queue.csv).
 
+### Secrets not found in the Codespace?
+Run `python outbound.py env`. It lists which secrets this terminal sees (names and lengths, never values) and explains the fix.
+Codespaces read secrets only when the codespace starts: add or change them, **stop** the codespace, reopen it, use a **new** terminal.
+Each secret's "Repository access" must include this repo. Quick workaround: `cp .env.example .env` and fill it in (gitignored).
+
 ### UI in GitHub Codespaces (no install on your laptop)
 1. github.com/settings/codespaces -> New secret: `GMAIL_USER` and `GMAIL_APP_PASSWORD`, repository access: this repo.
 2. Repo page -> Code -> Codespaces -> Create codespace on branch `claude/confident-knuth-cdvylw`.
