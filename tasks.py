@@ -326,13 +326,14 @@ def seed_dm(names, tasks=None, companies=None):
 
 def reopen(names, tasks=None):
     """Put finished (even Applied) tasks back to Open (clears Result, Confidence, Started at) so the agent redoes them.
-    Each name is a company substring, optionally `substring@type` to reopen only that task type."""
+    Each name is a company substring, optionally `substring@type` or `substring@type@Status` (e.g. `@pick_decision_makers@Failed`)."""
     tasks, n = tasks or Tasks, 0
-    wanted = [(x.split("@")[0].lower(), (x.split("@") + [""])[1]) for x in names]
+    wanted = [((p + ["", ""])[0].lower(), (p + ["", ""])[1], (p + ["", ""])[2]) for p in (x.split("@") for x in names)]
     for t in tasks.all():
         if t.get("Status") not in ("Done", "Applied", "Failed", "Needs human"):
             continue
-        if any(sub in (t.get("Company") or "").lower() and (not typ or typ == t.get("Type")) for sub, typ in wanted):
+        if any(sub in (t.get("Company") or "").lower() and (not typ or typ == t.get("Type")) and (not st or st == t.get("Status"))
+               for sub, typ, st in wanted):
             tasks.update([(t["_id"], {"Status": "Open", "Result": "", "Confidence": None, "Started at": None, "Note": "reopened for a rerun"})])
             n += 1
     return n

@@ -186,3 +186,11 @@ def test_task_without_reason_goes_back_to_the_agent_not_into_airtable():
     tk2 = dict(done("classify_post", {"kind": "startup"}), Tries=2)
     out, row, *_ = run(tk2)
     assert row["Status"] == "Failed"
+
+
+def test_reopen_can_target_one_status():
+    t = Fake([{"_id": "t1", "Company": "A", "Type": "pick_decision_makers", "Status": "Failed"},
+              {"_id": "t2", "Company": "B", "Type": "pick_decision_makers", "Status": "Applied"},
+              {"_id": "t3", "Company": "C", "Type": "classify_post", "Status": "Failed"}])
+    assert tasks.reopen(["@pick_decision_makers@Failed"], t) == 1
+    assert [r["Status"] for r in t.rows] == ["Open", "Applied", "Failed"]
