@@ -1,0 +1,21 @@
+name: Posts list
+
+# Manual, READ-ONLY. Lists companies that came from LinkedIn posts..
+on:
+  workflow_dispatch:
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID || 'appms9ERcB5Ws3r0w' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - run: python posts_list.py
