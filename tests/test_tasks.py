@@ -117,3 +117,19 @@ def test_review_flags_real_problems():
     v = {"Type": "verify_company", "Confidence": "High", "Started at": "2020-01-01T00:00:00.000Z",
          "Result": json.dumps({"same_company": True, "reason": "website and LinkedIn match the name"})}
     assert any("website" in p for p in tasks.review(v)[0])
+
+
+class NoStageColumn(Fake):
+    def update(self, ups):
+        if any("Funding stage" in f for _, f in ups):
+            raise RuntimeError('PATCH x -> 422: {"error":{"type":"UNKNOWN_FIELD_NAME","message":"Unknown field name: \\"Funding stage\\""}}')
+        super().update(ups)
+
+
+def test_missing_stage_column_still_saves_website_and_one_failure_does_not_stop_others():
+    t, comps = Fake([done("verify_company", {"same_company": True, "website": "https://a.io", "stage": "Seed", "reason": "x" * 20}),
+                     dict(done("classify_post", {"kind": "recruiter", "reason": "x" * 20}), _id="t2", **{"Company record": "c2"})]), NoStageColumn([{"_id": "c1"}, {"_id": "c2"}])
+    out = tasks.apply_done(t, {"Companies": comps, "Contacts": Fake()})
+    assert out["Applied"] == 2
+    assert comps.rows[0]["Website"] == "https://a.io" and "not saved" in t.rows[0]["Note"]
+    assert comps.rows[1]["Status"] == "Excluded"

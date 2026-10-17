@@ -93,9 +93,19 @@ def apply_verify_company(task, r, tables):
         tables["Companies"].update([(task["Company record"], {"Status": "Needs review"})])
         return "not the same company, left for review"
     fields = {k: v for k, v in {"Website": r.get("website"), "Funding stage": r.get("stage")}.items() if v}
-    if fields:
+    if not fields:
+        return "updated nothing"
+    try:
         tables["Companies"].update([(task["Company record"], fields)])
-    return f"updated {', '.join(fields) or 'nothing'}"
+    except RuntimeError as e:
+        if "UNKNOWN_FIELD_NAME" not in str(e) or "Funding stage" not in fields:
+            raise
+        # The base has no Funding stage column yet (it appears with the Apollo import): keep the website, say what was skipped.
+        stage = fields.pop("Funding stage")
+        if fields:
+            tables["Companies"].update([(task["Company record"], fields)])
+        return f"updated {', '.join(fields) or 'nothing'}; stage '{stage}' not saved (no Funding stage column yet)"
+    return f"updated {', '.join(fields)}"
 
 
 def apply_pick_decision_makers(task, r, tables):
@@ -152,7 +162,10 @@ def apply_done(tasks=None, tables=None):
         elif t.get("Confidence") != "High":
             status, note = "Needs human", "agent was not sure, please look"
         else:
-            status, note = "Applied", APPLY[kind](t, r, tables)
+            try:
+                status, note = "Applied", APPLY[kind](t, r, tables)
+            except RuntimeError as e:  # one bad task must not stop the rest
+                status, note = "Failed", f"could not apply: {str(e)[:200]}"
         tasks.update([(t["_id"], {"Status": status, "Note": note})])
         out[status] += 1
     return out
