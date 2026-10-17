@@ -1,0 +1,40 @@
+name: Apify actor info
+
+# Manual and READ-ONLY. Prints an actor's title, pricing and input schema. Does not run the actor, costs nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      actor:
+        description: "Actor id as owner~name"
+        default: "harvestapi~linkedin-post-search"
+
+jobs:
+  info:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      ACTOR: ${{ inputs.actor }}
+    steps:
+      - name: Actor details
+        run: |
+          curl -sS "https://api.apify.com/v2/acts/$ACTOR?token=$APIFY_TOKEN" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          if 'error' in d: print('ERROR', d['error']); sys.exit(1)
+          a=d['data']
+          print('title:', a.get('title')); print('name:', a.get('username'), '/', a.get('name')); print('description:', (a.get('description') or '')[:300])
+          for p in a.get('pricingInfos', [])[-1:]: print('pricing:', json.dumps({k: v for k, v in p.items() if k in ('pricingModel','pricePerUnitUsd','unitName','pricingPerEvent','trialMinutes')}))
+          print('stats:', json.dumps({k: a.get('stats', {}).get(k) for k in ('totalUsers30Days','totalRuns','publicActorRunStats30Days')}))
+          "
+      - name: Input schema
+        run: |
+          curl -sS "https://api.apify.com/v2/acts/$ACTOR/builds/default?token=$APIFY_TOKEN" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['data']
+          sch=json.loads(d['inputSchema']) if isinstance(d.get('inputSchema'),str) else d.get('inputSchema',{})
+          print('required:', sch.get('required'))
+          for k,v in sch.get('properties',{}).items():
+              print(k,'|',v.get('type'),'|',v.get('enum') or '','|default=',v.get('default'),'|min=',v.get('minimum'),'|',(v.get('description') or '').replace(chr(10),' ')[:200])
+          print('--- example input ---'); print(json.dumps(d.get('actorDefinition',{}).get('input',{}).get('prefill', sch.get('prefill', {})))[:600])
+          "
