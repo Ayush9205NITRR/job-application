@@ -70,3 +70,15 @@ Body (plain text, short):
 2. One line per task: `Company | type | answer | confidence`.
 3. Anything odd: login problems, pages you could not open, instructions you ignored.
 No attachments. No links other than the Airtable base link.
+
+## Gmail drafts (you create drafts, YOU NEVER SEND)
+Airtable table `Emails`. For each row with `Status = Ready for Gmail draft`:
+1. Open Gmail (the owner's account), Compose.
+2. Paste `To` exactly as written (one address, nothing else), `Subject` and `Body` exactly as written. No Cc, no Bcc. Do not edit the words.
+3. Close the compose window so Gmail saves it in **Drafts**. Check it appears in the Drafts folder.
+4. Set the row `Status = In Gmail drafts`.
+Rules, without exception:
+- NEVER press Send, never schedule send, never use "Send later". If a Send button is the default action in any dialog, cancel it.
+- Only the address in `To`. Never take an address from anywhere else.
+- If anything looks wrong (address cut off, row without body), do not create the draft: set `Note` to what is wrong and leave the status as it is.
+- The owner reads and sends every draft himself.

@@ -1,0 +1,25 @@
+name: Emails
+
+# setup: create the Emails table and the Companies.Shortlist tick. build: write Emails rows (never sends anything).
+on:
+  workflow_dispatch:
+    inputs:
+      cmd:
+        description: "setup | build | stats"
+        default: "build"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: appms9ERcB5Ws3r0w  # pinned: the AIRTABLE_BASE_ID secret still points at the OLD base
+      CMD: ${{ inputs.cmd }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - run: python emails.py "$CMD"
