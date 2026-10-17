@@ -133,3 +133,19 @@ def test_missing_stage_column_still_saves_website_and_one_failure_does_not_stop_
     assert out["Applied"] == 2
     assert comps.rows[0]["Website"] == "https://a.io" and "not saved" in t.rows[0]["Note"]
     assert comps.rows[1]["Status"] == "Excluded"
+
+
+def test_requeue_understands_ist_typed_into_utc_field():
+    ist_now = tasks.stamp(tasks.now() + tasks.timedelta(hours=5, minutes=30))  # just started, typed in IST
+    ist_old = tasks.stamp(tasks.now() + tasks.timedelta(hours=5, minutes=30) - tasks.STALE * 2)
+    t = Fake([{"_id": "t1", "Status": "Working", "Started at": ist_now, "Tries": 0},
+              {"_id": "t2", "Status": "Working", "Started at": ist_old, "Tries": 0}])
+    assert tasks.requeue_stale(t) == 1
+    assert {r["_id"]: r["Status"] for r in t.rows} == {"t1": "Working", "t2": "Open"}
+
+
+def test_reopen_takes_applied_tasks_and_seed_dm_is_idempotent():
+    t = Fake([{"_id": "t1", "Company": "Voyaah", "Status": "Applied", "Result": "{}", "Confidence": "High"}])
+    assert tasks.reopen(["voyaah"], t) == 1 and t.rows[0]["Status"] == "Open"
+    comps, t2 = Fake([{"_id": "c1", "Company": "Voyaah", "Company LinkedIn URL": "u"}]), Fake()
+    assert tasks.seed_dm(["voy"], t2, comps) == ["Voyaah"] and tasks.seed_dm(["voy"], t2, comps) == []

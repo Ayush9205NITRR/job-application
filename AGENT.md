@@ -14,7 +14,7 @@ Filter the `Tasks` grid: `Status` is `Open`. Expand a row to work on it.
 5. Set `Status = Done`.
 
 ## classify_post
-Input: `{"company", "linkedin", "post", "post_url"}`
+Input: `{"company", "linkedin", "post", "post_url"}` (`post` is the first line of a LinkedIn post, or a job title when the company came from a job listing; open `post_url` either way)
 Result: `{"kind": "...", "reason": "one short line"}`
 
 | kind | Use when |

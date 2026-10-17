@@ -21,8 +21,8 @@ def test_select_gates_work_in_the_right_order():
         comp("e", "Gone", status="Excluded"),
     ]
     out = taskplan.select(comps, {})
-    assert [x[1]["name"] for x in out["classify_post"]] == ["PostCo"]
-    assert [x[1]["name"] for x in out["verify_company"]] == ["UnmatchedJobCo"]
+    assert sorted(x[1]["name"] for x in out["classify_post"]) == ["PostCo", "UnmatchedJobCo"]
+    assert out["verify_company"] == []  # nobody is verified before being classified as a startup
     assert [x[1]["name"] for x in out["pick_decision_makers"]] == ["IcpCo"]
 
 
@@ -36,23 +36,30 @@ def test_post_company_waits_for_startup_verdict():
     assert taskplan.select([c], recruiter)["verify_company"] == []
 
 
+def test_big_companies_get_no_task():
+    big = comp("a", "Giant", Headcount="5000")
+    small = comp("b", "Tiny", Headcount="12")
+    out = taskplan.select([big, small], {})
+    assert [x[1]["name"] for x in out["classify_post"]] == ["Tiny"]
+
+
 def test_plan_caps_lanes_and_is_idempotent(monkeypatch):
     monkeypatch.setenv("TASK_LANES", "2")
     comps = [comp(str(i), f"Co{i}") for i in range(5)]
     t = Fake()
-    assert taskplan.plan(max_per_type=3, cap=100, tasks=t, comps=comps) == {"verify_company": 3}
+    assert taskplan.plan(max_per_type=3, cap=100, tasks=t, comps=comps) == {"classify_post": 3}
     assert sorted(r["Lane"] for r in t.rows) == [1, 1, 2]
-    assert taskplan.plan(max_per_type=10, cap=100, tasks=t, comps=comps) == {"verify_company": 2}
+    assert taskplan.plan(max_per_type=10, cap=100, tasks=t, comps=comps) == {"classify_post": 2}
     assert len(t.rows) == 5
     assert taskplan.plan(max_per_type=10, cap=100, tasks=t, comps=comps) == {}
     t2 = Fake()
     out = taskplan.plan(max_per_type=10, cap=2, tasks=t2, comps=comps)
-    assert out["verify_company"] == 2 and out["capped"] and len(t2.rows) == 2
+    assert out["classify_post"] == 2 and out["capped"] and len(t2.rows) == 2
 
 
 def test_dry_run_writes_nothing():
     t = Fake()
-    assert taskplan.plan(tasks=t, comps=[comp("a", "X")], dry=True) == {"verify_company": 1} and t.rows == []
+    assert taskplan.plan(tasks=t, comps=[comp("a", "X")], dry=True) == {"classify_post": 1} and t.rows == []
 
 
 def test_stats_accuracy():

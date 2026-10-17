@@ -176,6 +176,8 @@ def requeue_stale(tasks=None, at_time=None):
     n = 0
     for t in tasks.all('{Status}="Working"'):
         started = datetime.fromisoformat((t.get("Started at") or stamp(now_ - STALE * 2)).replace("Z", "+00:00"))
+        if started > now_ + timedelta(minutes=5):  # agent typed IST (UTC+5:30) into a UTC field
+            started -= timedelta(hours=5, minutes=30)
         if now_ - started < STALE:
             continue
         tries = int(t.get("Tries") or 0) + 1
@@ -281,11 +283,24 @@ def readback():
             print(f"    note: {t['Note'][:200]}")
 
 
+def seed_dm(names, tasks=None, companies=None):
+    """Open pick_decision_makers tasks for the named companies (used to test the type before the planner would create it)."""
+    tasks, companies = tasks or Tasks, companies or at.Companies
+    made = []
+    for c in companies.all():
+        name = c.get("Company") or ""
+        if any(x.lower() in name.lower() for x in names):
+            payload = {"company": name, "linkedin": c.get("Company LinkedIn URL", ""), "website": c.get("Website", ""), "people": []}
+            if create_task("pick_decision_makers", name, c["_id"], payload, tasks):
+                made.append(name)
+    return made
+
+
 def reopen(names, tasks=None):
-    """Put finished tasks back to Open (clears Result, Confidence, Started at) so the agent redoes them. Match by company name substring."""
+    """Put finished (even Applied) tasks back to Open (clears Result, Confidence, Started at) so the agent redoes them. Match by company name substring."""
     tasks, n = tasks or Tasks, 0
     for t in tasks.all():
-        if t.get("Status") in ("Done", "Failed", "Needs human") and any(x.lower() in (t.get("Company") or "").lower() for x in names):
+        if t.get("Status") in ("Done", "Applied", "Failed", "Needs human") and any(x.lower() in (t.get("Company") or "").lower() for x in names):
             tasks.update([(t["_id"], {"Status": "Open", "Result": "", "Confidence": None, "Started at": None, "Note": "reopened for a rerun"})])
             n += 1
     return n
@@ -322,4 +337,4 @@ def setup():
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    {"setup": setup, "readback": readback, "reopen": lambda: print("reopened", reopen([x.strip() for x in sys.argv[2].split("|") if x.strip()])), "where": where, "show": show, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
+    {"setup": setup, "seed_dm": lambda: print("seeded", seed_dm([x.strip() for x in sys.argv[2].split("|") if x.strip()])), "readback": readback, "reopen": lambda: print("reopened", reopen([x.strip() for x in sys.argv[2].split("|") if x.strip()])), "where": where, "show": show, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()

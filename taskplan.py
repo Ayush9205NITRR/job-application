@@ -24,6 +24,14 @@ def classify_ok(task):
         return False
 
 
+BIG = 200  # LinkedIn headcount above this is not a seed/pre-seed target: no agent time spent
+
+
+def too_big(c):
+    n = companies.employees(c.get("Headcount"))
+    return n is not None and n > BIG
+
+
 def select(comps, existing):
     """comps: Airtable Companies with jobs. existing: {Task ID: task}. -> {type: [(company row, serialized, payload)]}"""
     out = {k: [] for k in T.TYPES}
@@ -31,16 +39,18 @@ def select(comps, existing):
         s = companies.serialize(c)
         if s["excluded"] or s["done"] or not s["li"]:
             continue
-        post_only = bool(c.get("jobs")) and all(str(j.get("Job ID", "")).startswith("post-") for j in c["jobs"])
         base = {"company": s["name"], "linkedin": s["li"], "website": s["website"]}
         cls = existing.get(f"classify_post:{c['_id']}")
-        if post_only and s["status"] == "Needs review" and not s["matched"]:
-            first = next(j for j in c["jobs"])
-            out["classify_post"].append((c, s, {**base, "post": (first.get("Title") or "")[7:], "post_url": first.get("Job URL", "")}))
-        if post_only and not (cls and classify_ok(cls)):
-            continue  # a post company must be classified as a startup before more work is spent on it
         if not s["matched"]:
-            out["verify_company"].append((c, s, {**base, "search_results": []}))
+            if too_big(c):
+                continue
+            first = next(iter(c.get("jobs") or []), {})
+            title = first.get("Title") or ""
+            title = title[7:] if title.startswith("[Post] ") else title
+            if s["status"] == "Needs review" and not cls:
+                out["classify_post"].append((c, s, {**base, "post": title, "post_url": first.get("Job URL", "")}))
+            if cls and classify_ok(cls):  # recruiters, services firms and non-hiring posts never reach verify
+                out["verify_company"].append((c, s, {**base, "search_results": []}))
         elif companies.icp_check(s)[0]:
             out["pick_decision_makers"].append((c, s, {**base, "people": []}))
     return out
