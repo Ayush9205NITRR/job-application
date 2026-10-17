@@ -69,7 +69,7 @@ POST_QUERIES = ["hiring founder's office", "hiring chief of staff", "hiring busi
                 "founder's office hiring startup", "we are hiring associate to the CEO"]
 POST_ROLE = re.compile(r"founder['\u2019]?s?\s+office|chief of staff|business development|\bbd\b|sales|growth|strategy|"
                        r"associate to (the )?(ceo|founder)|ceo['\u2019]?s office", re.I)
-JOB_BOARD = re.compile(r"\bjobs?\b|vacanc|recruit|hiring|career|placement|staffing|manpower|talent", re.I)
+JOB_BOARD = re.compile(r"jobs?\b|vacanc|recruit|hiring|career|placement|staffing|manpower|talent|remote(?!ly)|ajira|\bhub\b|chakri|tempjobs", re.I)
 
 
 def scrape_posts(queries=None, max_posts=50, posted_limit="month", sort_by="date", log=print) -> list[dict]:
