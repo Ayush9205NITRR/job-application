@@ -29,3 +29,14 @@ def test_no_shortlist_no_email_and_never_twice():
     assert run([person("p1")], existing=[{"_id": "e1", "Contact record": "p1", "To": "a@acme.ai"}])[0] == 0
     n, rows, _ = run([person("p1"), person("p9", "A@acme.ai")])  # same address written twice
     assert n == 1
+
+
+def test_auto_shortlist_ticks_only_early_stage_verified_companies():
+    ok = {"_id": "a", "Company": "A", "Status": "Needs review", "Apollo match": "agent", "Funding stage": "Pre-Series A", "Employees (Apollo)": "11-50"}
+    big = dict(ok, _id="b", **{"Funding stage": "Series C", "Employees (Apollo)": "900"})
+    unverified = {"_id": "c", "Company": "C", "Status": "Needs review", "Funding stage": "Seed", "Employees (Apollo)": "5"}
+    excluded = dict(ok, _id="d", Status="Excluded")
+    upd = []
+    assert emails.auto_shortlist([ok, big, unverified, excluded], upd.extend) == 1 and upd == [("a", {"Shortlist": True})]
+    n, rows, _ = run([person("p1")], [dict(CO, Shortlist=False, **{"Apollo match": "agent", "Funding stage": "Seed", "Employees (Apollo)": "10"})])
+    assert n == 0  # build() only shortlists when asked to

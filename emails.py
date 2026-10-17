@@ -44,9 +44,27 @@ def eligible(contact, company):
     return bool(company and company.get("Shortlist") and company.get("Status") != "Excluded" and not ob.EXCLUDE.search(company.get("Company") or ""))
 
 
-def build(contacts=None, companies=None, jobs=None, emails=None, update_contacts=None):
+def auto_shortlist(companies, update=None):
+    """Gate 1 for the one-run mode: tick Shortlist on companies that pass the wider early-stage ICP and have verified facts.
+    Only ticks, never unticks. Drafts still wait in Gmail for Ayush to press Send."""
+    import companies as co
+    picked = []
+    for c in companies:
+        s = co.serialize(dict(c, jobs=[]))
+        if not c.get("Shortlist") and c.get("Status") != "Excluded" and s["matched"] and co.icp_check(s, co.RELAXED_ICP)[0]:
+            picked.append((c["_id"], {"Shortlist": True}))
+            c["Shortlist"] = True
+    if picked:
+        (update or at.Companies.update)(picked)
+    return len(picked)
+
+
+def build(contacts=None, companies=None, jobs=None, emails=None, update_contacts=None, auto_shortlist_on=False, update_companies=None):
     contacts = contacts if contacts is not None else at.Contacts.all()
-    companies = {c["_id"]: c for c in (companies if companies is not None else at.Companies.all())}
+    companies_list = companies if companies is not None else at.Companies.all()
+    if auto_shortlist_on:
+        auto_shortlist(companies_list, update_companies)
+    companies = {c["_id"]: c for c in companies_list}
     jobs = jobs if jobs is not None else at.Jobs.all()
     emails = emails or Emails
     have = {e.get("Contact record") for e in emails.all()} | {e.get("To", "").lower() for e in emails.all()}
@@ -95,4 +113,4 @@ def stats():
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    {"setup": setup, "build": lambda: print("built", build()), "stats": stats}.get(cmd, lambda: print(__doc__))()
+    {"setup": setup, "build": lambda: print("built", build(auto_shortlist_on="--auto" in sys.argv)), "stats": stats}.get(cmd, lambda: print(__doc__))()

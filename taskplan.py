@@ -52,7 +52,7 @@ def select(comps, existing):
                 out["classify_post"].append((c, s, {**base, "post": title, "post_url": first.get("Job URL", "")}))
             if cls and classify_ok(cls):  # recruiters, services firms and non-hiring posts never reach verify
                 out["verify_company"].append((c, s, {**base, "search_results": []}))
-        elif companies.icp_check(s)[0]:
+        elif companies.icp_check(s, companies.RELAXED_ICP)[0]:
             out["pick_decision_makers"].append((c, s, {**base, "people": []}))
     return out
 
@@ -119,6 +119,13 @@ def main():
         print("requeued", T.requeue_stale())
         print("applied", T.apply_done())
         print("PLAN", plan(arg("--max", 10), arg("--cap", 100)))
+        print("STATS", json.dumps(stats(), indent=1))
+    elif cmd == "round":  # everything code does between two agent waves
+        import emails
+        print("requeued", T.requeue_stale())
+        print("applied", T.apply_done())
+        print("PLAN", plan(arg("--max", 10), arg("--cap", 100)))
+        print("EMAILS built", emails.build(auto_shortlist=True))
         print("STATS", json.dumps(stats(), indent=1))
     elif cmd == "cycle":
         print("requeued", T.requeue_stale())

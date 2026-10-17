@@ -44,6 +44,11 @@ def employees(s):
 DEFAULT_ICP = {"stages": None, "emp_min": 2, "emp_max": 50, "rev_max": None, "funding_max": None, "unknown_ok": False}
 
 
+# Wider net for the one-click run: early-stage companies of any naming (Seed, Pre-Series A, bootstrapped) up to 100 people.
+RELAXED_ICP = {"stages": ["Seed", "Pre-Seed", "Pre-seed", "Angel", "Pre-Series A", "Bootstrapped"], "emp_min": 1, "emp_max": 100,
+               "rev_max": None, "funding_max": None, "unknown_ok": False}
+
+
 def icp_check(c, f=None):
     """ICP decision with the page's settings. `c` is serialize()-shaped (stage, employees_n, revenue_n, funding_n, excluded).
     Mirrors icpPass() in web/index.html. -> (is_icp, reason)"""
