@@ -41,14 +41,34 @@ def employees(s):
     return int(n) if n is not None else None
 
 
-def icp(c):
-    """Kept for the CLI path: seed / pre-seed, 2 to 50 employees. -> (is_icp, reason)."""
-    stage, emp = (c.get("Funding stage") or "").strip(), employees(c.get("Employees (Apollo)"))
-    if not SEED.search(stage):
+DEFAULT_ICP = {"stages": None, "emp_min": 2, "emp_max": 50, "rev_max": None, "funding_max": None, "unknown_ok": False}
+
+
+def icp_check(c, f=None):
+    """ICP decision with the page's settings. `c` is serialize()-shaped (stage, employees_n, revenue_n, funding_n, excluded).
+    Mirrors icpPass() in web/index.html. -> (is_icp, reason)"""
+    f = {**DEFAULT_ICP, **(f or {})}
+    if c.get("excluded"):
+        return False, "hard-excluded (staffing, events, assistant role)"
+    stage, emp = c.get("stage") or "", c.get("employees_n")
+    ok = (stage in f["stages"]) if f["stages"] else bool(SEED.search(stage))
+    note = stage.lower() if ok else ""
+    if not ok and not stage and f["unknown_ok"] and emp is not None:
+        ok, note = True, "no funding data, included"
+    if not ok:
         return False, f"stage: {stage or 'unknown'}"
-    if emp is not None and not 2 <= emp <= 50:
+    if emp is not None and ((f["emp_min"] is not None and emp < f["emp_min"]) or (f["emp_max"] is not None and emp > f["emp_max"])):
         return False, f"{emp} employees"
-    return True, "seed" + (f", {emp} employees" if emp else "")
+    if f["rev_max"] is not None and c.get("revenue_n") is not None and c["revenue_n"] > f["rev_max"]:
+        return False, "revenue above limit"
+    if f["funding_max"] is not None and c.get("funding_n") is not None and c["funding_n"] > f["funding_max"]:
+        return False, "funding above limit"
+    return True, note + (f", {emp} employees" if emp is not None else "")
+
+
+def icp(c):
+    """Airtable-shaped rows (Funding stage, Employees (Apollo)) with the default ICP. -> (is_icp, reason)"""
+    return icp_check({"stage": (c.get("Funding stage") or "").strip(), "employees_n": employees(c.get("Employees (Apollo)"))})
 
 
 def serialize(c, inter=None):
@@ -111,7 +131,7 @@ def import_apollo_companies(path):
     return {"apollo": len(apollo), "matched": len(matches), "unmatched": len(unmatched), "methods": methods}
 
 
-def preview_apollo(path, comps=None):
+def preview_apollo(path, comps=None, icp_settings=None):
     """Match an Apollo CSV onto the Airtable companies WITHOUT writing anything. Shows what would happen:
     match counts per method, which of the 4 parameters were found, ICP count, a sample of matches and misses."""
     import apollo_to_airtable as a
@@ -123,9 +143,9 @@ def preview_apollo(path, comps=None):
     methods, rows = {}, []
     for row, ap, method in matches:
         methods[method] = methods.get(method, 0) + 1
-        ok, why = icp({"Funding stage": ap.get("Funding stage", ""), "Employees (Apollo)": ap.get("Employees (Apollo)", "")})
-        if row.get("Status") == "Excluded":   # staffing, events, assistant roles: never ICP, whatever the funding says
-            ok, why = False, "hard-excluded (staffing, events, assistant role)"
+        ok, why = icp_check({"stage": (ap.get("Funding stage") or "").strip(), "employees_n": employees(ap.get("Employees (Apollo)")),
+                             "revenue_n": parse_money(ap.get("Annual revenue (Apollo)")), "funding_n": parse_money(ap.get("Total funding")),
+                             "excluded": row.get("Status") == "Excluded"}, icp_settings)
         rows.append({"apollo": ap["name"], "company": row.get("Company") or "", "method": method, "stage": ap.get("Funding stage", ""),
                      "funding": ap.get("Total funding", ""), "revenue": ap.get("Annual revenue (Apollo)", ""),
                      "employees": ap.get("Employees (Apollo)", ""), "icp": ok, "why": why})

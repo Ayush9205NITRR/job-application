@@ -33,10 +33,12 @@ QLOCK = threading.RLock()      # queue.csv read-modify-write
 SLOCK = threading.RLock()      # ui_state.json
 PENDING = {}                   # previewed Apollo CSV waiting for 'Save to Airtable' (memory only, never on disk)
 
-DEFAULT_ICP = {"stages": None, "emp_min": 2, "emp_max": 50, "rev_max": None, "funding_max": None}
+DEFAULT_ICP = companies.DEFAULT_ICP
 DEFAULT_CLIENTS = ("Raphe\nMongo DB | MongoDB\nSprinto\nAnarock\nMyhq | myHQ\nAugmont\nMaruti RND | Maruti R&D\nClueso\n"
                    "Dangle Ads\nGFI\nTeam Computers\nSMB Microfinance\nAdmattic")
-DEFAULT_KEYWORDS = "Founder's Office\nFounders Office\nChief of Staff"
+DEFAULT_KEYWORDS = ("Founder's Office\nFounders Office Associate\nChief of Staff\nAssociate to the CEO\nBusiness Development Associate\n"
+                    "Growth Associate\nStrategy and Operations Associate\nSales Strategy Associate")
+DATE_POSTED = {"pastWeek", "pastMonth", "anyTime", "past24Hours"}
 
 
 # ---- persisted UI state (settings, selection, overlap results) -----------------------------------------------
@@ -247,13 +249,14 @@ def post(path, body, raw, headers):
             raise ApiError(400, "Add at least one keyword.")
         if not os.environ.get("APIFY_TOKEN") or not companies.airtable_ready():
             raise ApiError(400, "APIFY_TOKEN and the Airtable settings are needed for scraping.")
+        date_posted = body.get("date_posted") if body.get("date_posted") in DATE_POSTED else None
         update_state(keywords="\n".join(kws))
 
         def job():
             import pipeline
             from fo import airtable as at
             at.DRY_RUN = False
-            raw_jobs = pipeline.scrape(kws, body.get("location") or None, body.get("limit") or None, log=lambda *a: ob.log(*a))
+            raw_jobs = pipeline.scrape(kws, body.get("location") or None, body.get("limit") or None, date_posted, log=lambda *a: ob.log(*a))
             ob.log(f"scraped {len(raw_jobs)} jobs")
             r = pipeline.run(raw_jobs, log=lambda *a: ob.log(*a))
             companies.invalidate()
@@ -264,7 +267,7 @@ def post(path, body, raw, headers):
             raise ApiError(400, "Airtable is not connected.")
         csv_path = tmp_csv(raw)
         try:
-            r = companies.preview_apollo(csv_path)
+            r = companies.preview_apollo(csv_path, icp_settings=load_state()["icp"])
         except Exception as e:
             raise ApiError(400, f"Could not read that file: {e}")
         finally:

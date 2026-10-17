@@ -347,12 +347,16 @@ def test_preview_apollo_matches_icp_and_reports_missing_columns(tmp_path):
 def test_scrape_job_runs_pipeline_and_records_summary(srv, monkeypatch):
     import pipeline
     monkeypatch.setenv("APIFY_TOKEN", "t")
-    monkeypatch.setattr(pipeline, "scrape", lambda kws, loc, lim, log=print: [{"id": "1"}] * 3)
+    seen = {}
+    monkeypatch.setattr(pipeline, "scrape", lambda kws, loc, lim, dp=None, log=print: seen.update(kws=kws, loc=loc, lim=lim, dp=dp) or [{"id": "1"}] * 3)
     monkeypatch.setattr(pipeline, "run", lambda raw, log=print: {"companies": 2, "jobs": 3, "new": 2})
-    assert call(srv, "/api/scrape", {"keywords": "Founder's Office\nChief of Staff", "location": "India", "limit": 50})["started"] is True
+    assert call(srv, "/api/scrape", {"keywords": "Founder's Office\nChief of Staff", "location": "India", "limit": 50, "date_posted": "pastMonth"})["started"] is True
     wait_job()
+    assert seen == {"kws": ["Founder's Office", "Chief of Staff"], "loc": "India", "lim": 50, "dp": "pastMonth"}
     st = call(srv, "/api/state")
     assert st["last_scrape"]["jobs"] == 3 and st["keywords"].startswith("Founder's Office")
+    call(srv, "/api/scrape", {"keywords": "X", "date_posted": "drop table"}); wait_job()
+    assert seen["dp"] is None                                                    # unknown date window is ignored, not passed on
     assert call(srv, "/api/scrape", {"keywords": ""})["_code"] == 400
 
 
@@ -375,3 +379,73 @@ def test_verify_listing_lines():
     import verify_data as v
     out = v.listing([{"Company": "A|B", "Company LinkedIn URL": "https://www.linkedin.com/company/ab", "Website": "https://www.ab.io/x", "Status": "Excluded"}, {"Company": "N"}])
     assert out == ["ab|A B|ab.io|Excluded", "-|N|-|-"]
+
+
+# ---- ICP with the unknown-funding toggle ------------------------------------------------------------------
+def sc(stage="", emp=None, **kw):
+    return {"stage": stage, "employees_n": emp, "revenue_n": None, "funding_n": None, "excluded": False, **kw}
+
+
+@pytest.mark.parametrize("c,f,ok", [
+    (sc("Seed", 12), {}, True), (sc("Series B", 12), {}, False), (sc("Seed", 80), {}, False), (sc("Seed", None), {}, True),
+    (sc("", 12), {}, False),                                           # unknown stage excluded by default
+    (sc("", 12), {"unknown_ok": True}, True),                          # toggle on: unknown stage + headcount in range
+    (sc("", 80), {"unknown_ok": True}, False),                         # ...but headcount must be in range
+    (sc("", None), {"unknown_ok": True}, False),                       # ...and must be known
+    (sc("Series A", 12), {"unknown_ok": True}, False),                 # toggle only affects companies with NO stage
+    (sc("", 12, excluded=True), {"unknown_ok": True}, False),          # hard excludes always lose
+    (sc("Series A", 12), {"stages": ["Series A"]}, True),              # custom stage list
+    (sc("Seed", 12, revenue_n=9e6), {"rev_max": 5e6}, False), (sc("Seed", 12, revenue_n=None), {"rev_max": 5e6}, True),
+    (sc("Seed", 12, funding_n=2e7), {"funding_max": 1e7}, False), (sc("Seed", 12), {"emp_min": 20}, False)])
+def test_icp_check(c, f, ok):
+    assert co.icp_check(c, f)[0] is ok
+
+
+def test_preview_honours_unknown_toggle_and_numbers(tmp_path):
+    comps = [{"_id": "r1", "Company": "Known", "Company LinkedIn URL": "https://www.linkedin.com/company/known"},
+             {"_id": "r2", "Company": "Tiny Unfunded", "Company LinkedIn URL": "https://www.linkedin.com/company/tiny"},
+             {"_id": "r3", "Company": "Big Unfunded", "Company LinkedIn URL": "https://www.linkedin.com/company/big"}]
+    f = tmp_path / "a.csv"
+    f.write_text("Company Name,Company Linkedin Url,Latest Funding,Total Funding,Annual Revenue,# Employees\n"
+                 "Known,linkedin.com/company/known,Seed,2000000,,12\nTiny Unfunded,linkedin.com/company/tiny,,,,9\nBig Unfunded,linkedin.com/company/big,,,,900\n")
+    assert co.preview_apollo(f, comps)["icp"] == 1
+    p = co.preview_apollo(f, comps, {"unknown_ok": True})
+    assert p["icp"] == 2 and "no funding data" in next(r["why"] for r in p["rows"] if r["company"] == "Tiny Unfunded")
+
+
+def test_icp_setting_persists_and_reaches_preview(srv, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(co, "preview_apollo", lambda path, comps=None, icp_settings=None: seen.update(s=icp_settings) or {"csv_rows": 0, "apollo": 0, "matched": 0, "unmatched": 0,
+                        "methods": {}, "icp": 0, "fields_found": {}, "airtable_companies": 0, "rows": [], "unmatched_sample": []})
+    call(srv, "/api/icp", {"icp": {"stages": None, "emp_min": 2, "emp_max": 50, "unknown_ok": True}})
+    call(srv, "/api/apollo", raw=b"Company Name\nX\n")
+    assert seen["s"]["unknown_ok"] is True
+
+
+# ---- scrape runs in parallel and tolerates one failing keyword ---------------------------------------------------
+def test_scrape_runs_keywords_in_parallel_and_survives_a_failure(monkeypatch):
+    import pipeline
+    monkeypatch.setenv("APIFY_TOKEN", "t")
+    monkeypatch.setattr(pipeline, "ROOT", pipeline.ROOT / "nonexistent_dir")          # no apify_input.json override
+    posted, lock = [], threading.Lock()
+
+    class R:
+        def __init__(self, n): self.n = n
+        def json(self): return [{"id": f"j{self.n}-{i}"} for i in range(self.n)]
+
+    def fake(method, url, **kw):
+        with lock:
+            posted.append(kw["json"])
+        if kw["json"]["keywords"] == "bad":
+            raise RuntimeError("actor failed")
+        time.sleep(0.05)
+        return R(2)
+    monkeypatch.setattr(pipeline, "request", fake)
+    logs = []
+    out = pipeline.scrape(["a", "b", "bad", "c"], "India", 300, "pastMonth", log=logs.append)
+    assert len(out) == 6 and sorted(p["keywords"] for p in posted) == ["a", "b", "bad", "c"]
+    assert all(p["limitPerSource"] == 300 and p["datePosted"] == "pastMonth" and p["location"] == "India" and p["scrapeCompany"] for p in posted)
+    assert any("FAILED" in l and "bad" in l for l in logs)
+    monkeypatch.setattr(pipeline, "request", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("down")))
+    with pytest.raises(SystemExit):
+        pipeline.scrape(["a", "b"], log=lambda *a: None)

@@ -28,7 +28,8 @@ def page_url(tmp_path, monkeypatch):
     for k, v in dict(AIRTABLE_TOKEN="t", AIRTABLE_BASE_ID="appXXXXXXXXXXXXXX", GMAIL_USER="me@gmail.com", GMAIL_APP_PASSWORD="x").items():
         monkeypatch.setenv(k, v)
     monkeypatch.setattr(co, "_cache", {"rows": [comp(1, "Acme Logistics", "Seed", "12", "https://acme.io"), comp(2, "Beta Labs", "Series B", "300", "https://beta.io"),
-                                                comp(3, "Gamma AI", "Pre Seed", "6", "https://gamma.io")]})
+                                                comp(3, "Gamma AI", "Pre Seed", "6", "https://gamma.io"),
+                                                comp(4, "Unfunded Tiny", "", "8", "https://tiny.io")]})
     monkeypatch.setattr(co, "save_shortlist", lambda sel, shown: len(sel))
     pages = {"acme.io": "Our customers: MongoDB and Sprinto", "gamma.io": "nothing relevant"}
     monkeypatch.setattr(ov, "default_fetch", lambda url: (404, "") if url.endswith("robots.txt") else
@@ -55,11 +56,15 @@ def test_full_flow_in_browser(page_url):
         pg.on("pageerror", lambda e: errors.append(str(e)))
         pg.goto(url)
         pg.click(".step >> text=ICP and overlap")
-        pg.wait_for_selector("text=2 of 3 match")                                   # Seed + Pre Seed, not Series B
+        pg.wait_for_selector("text=2 of 4 match")                                   # Seed + Pre Seed, not Series B, not the unfunded one
+        pg.check("[data-icp-bool=unknown_ok]")
+        pg.wait_for_selector("text=3 of 4 match")                                   # toggle: unfunded company with 8 employees joins
+        pg.uncheck("[data-icp-bool=unknown_ok]")
+        pg.wait_for_selector("text=2 of 4 match")
         pg.fill("[data-icp=emp_max]", "10"); pg.dispatch_event("[data-icp=emp_max]", "change")
-        pg.wait_for_selector("text=1 of 3 match")                                   # live re-filter, no reload
+        pg.wait_for_selector("text=1 of 4 match")                                   # live re-filter, no reload
         pg.fill("[data-icp=emp_max]", "50"); pg.dispatch_event("[data-icp=emp_max]", "change")
-        pg.wait_for_selector("text=2 of 3 match")
+        pg.wait_for_selector("text=2 of 4 match")
         pg.click("text=Check overlap with my clients")
         pg.wait_for_selector(".chip.tog[data-id]", timeout=10000)
         assert pg.inner_text("tr.hi >> nth=0").count("Mongo DB") == 1

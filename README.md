@@ -10,9 +10,9 @@ Nothing is sent without `approved=y`. Plain text, no tracking, resume link only 
 4. `python outbound.py draft apollo.csv`, then `python outbound.py cycle --dry` to read what would happen.
 
 ## The flow (one page, `python ui.py`)
-1. **Scrape jobs**: Apify finds Founder's Office jobs, companies + jobs go to Airtable (needs `APIFY_TOKEN`). LinkedIn *posts* need a second Apify actor, not connected yet.
+1. **Scrape jobs**: Apify finds Founder's Office jobs (8 keywords by default, up to 300 jobs each, past month, 3 keywords at a time), companies + jobs go to Airtable (needs `APIFY_TOKEN`). LinkedIn *posts* need a second Apify actor, not connected yet.
 2. **Apollo CSV**: drop the account export (Company Linkedin Url or Website, Funding, Funding Stage, Revenue, Employees). It is matched onto the scraped companies.
-3. **ICP and overlap**: live filter on stage, employees, revenue, funding (default seed / pre-seed, 2 to 50 employees). Matches are ticked and highlighted. "Check overlap" reads each company's public site (home, customers, case studies, about; robots.txt respected, 8 in parallel) for **your clients** (editable list, `Name | alias`, `#` to leave one out). Matches become the pitch, click a name to leave it out. Also: calendar blocks (.ics) for applying, mark applied.
+3. **ICP and overlap**: live filter on stage, employees, revenue, funding (default seed / pre-seed, 2 to 50 employees; optional toggle to include companies with no funding data, only if their headcount is known and in range). Matches are ticked and highlighted. "Check overlap" reads each company's public site (home, customers, case studies, about; robots.txt respected, 8 in parallel) for **your clients** (editable list, `Name | alias`, `#` to leave one out). Matches become the pitch, click a name to leave it out. Also: calendar blocks (.ics) for applying, mark applied.
 4. **Contacts**: drop `Company Linkedin, POC First Name, POC Email, POC Contact Detail`. Only selected companies are added, as drafts. Companies with overlap get a pitch ("I saw X works with A and B. I have worked with them too."), the rest the generic email.
 5. **Review and send**: edit the opening line, approve (keys j k a s e x), send. Follow-ups go out on day 5 and day 12. Nothing is sent without approval and a Send click.
 

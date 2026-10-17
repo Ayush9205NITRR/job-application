@@ -27,27 +27,37 @@ DEFAULT_INPUT = {
 }
 
 
-def scrape(keywords=None, location=None, limit=None, log=print) -> list[dict]:
+def scrape(keywords=None, location=None, limit=None, date_posted=None, log=print, workers=3) -> list[dict]:
     inp_file = ROOT / "apify_input.json"
     inp = dict(json.loads(inp_file.read_text()) if inp_file.exists() else DEFAULT_INPUT)
     if location:
         inp["location"] = location
     if limit:
         inp["limitPerSource"] = int(limit)
+    if date_posted:
+        inp["datePosted"] = date_posted
     kws = keywords or inp.pop("keywords")
     inp.pop("keywords", None)
     kws = [kws] if isinstance(kws, str) else kws
     actor = env("APIFY_ACTOR", "meka.im~linkedin-jobs-scraper", required=False)
     url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
     items, errors = [], []
-    for kw in kws:
+
+    def one(kw):  # the actor takes one keyword per run, so run several at once
         try:
-            got = request("POST", url, params={"token": env("APIFY_TOKEN")}, json={**inp, "keywords": kw}, timeout=900).json()
-            log(f"  {kw!r}: {len(got)} jobs")
-            items += got
+            return kw, request("POST", url, params={"token": env("APIFY_TOKEN")}, json={**inp, "keywords": kw}, timeout=900).json(), None
         except RuntimeError as e:
-            log(f"  {kw!r}: FAILED {e}")
-            errors.append(e)
+            return kw, [], e
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(kws)))) as ex:
+        for kw, got, err in ex.map(one, kws):
+            if err:
+                log(f"  {kw!r}: FAILED {err}")
+                errors.append(err)
+            else:
+                log(f"  {kw!r}: {len(got)} jobs")
+                items += got
     if errors and not items:
         raise SystemExit("every scrape run failed")
     return items

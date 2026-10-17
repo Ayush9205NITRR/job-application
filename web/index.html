@@ -77,7 +77,7 @@ const SEEDRE = /seed|pre[- ]?seed|angel|bootstrap/i;
 
 const S = {step: 1, companies: null, cerr: "", queue: [], stats: {sent_today: 0, cap: 5, halted: false, counts: {}}, icp: {}, clients: "", keywords: "",
   env: {}, selected: new Set(), manual: {}, qfilter: "review", qsearch: "", csearch: "", hideNon: false, last_scrape: null, warn: "", job: {id: 0, running: false, log: []},
-  focus: 0, contactsResult: null, apolloResult: null, verified: "no", drawerOpen: false};
+  scrape: {loc: "India", limit: 300, date: "pastMonth"}, focus: 0, contactsResult: null, apolloResult: null, verified: "no", drawerOpen: false};
 let pollTimer = null, saveTimer = null, icpTimer = null;
 
 // ---------- api ----------
@@ -104,7 +104,9 @@ function money(s) {
 function fmt(n) { if (n == null) return "?"; if (n >= 1e9) return (n / 1e9).toFixed(1) + "B"; if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M"; if (n >= 1e3) return Math.round(n / 1e3) + "K"; return String(n); }
 function icpPass(c) {
   if (c.excluded) return false;   // hard excludes (staffing, events, assistant roles) are never ICP
-  const f = S.icp, ok = f.stages ? f.stages.includes(c.stage) : SEEDRE.test(c.stage);
+  const f = S.icp;
+  let ok = f.stages ? f.stages.includes(c.stage) : SEEDRE.test(c.stage);
+  if (!ok && !c.stage && f.unknown_ok && c.employees_n != null) ok = true;   // no funding data: only with a known headcount, which is range-checked below
   if (!ok) return false;
   if (c.employees_n != null) { if (f.emp_min != null && c.employees_n < f.emp_min) return false; if (f.emp_max != null && c.employees_n > f.emp_max) return false; }
   if (f.rev_max != null && c.revenue_n != null && c.revenue_n > f.rev_max) return false;
@@ -192,14 +194,20 @@ function render() {
 function go(n) { S.step = n; location.hash = "#/" + n; render(); window.scrollTo(0, 0); }
 
 // ---------- 1 scrape ----------
+function costText() {
+  const n = (S.keywords || "").split("\n").filter(x => x.trim()).length, jobs = n * (S.scrape.limit || 0);
+  return `${n} keywords x ${S.scrape.limit} = up to ${jobs.toLocaleString()} jobs, about $${(jobs * 0.0003).toFixed(2)}. Runs 3 at a time, roughly ${Math.max(2, Math.ceil(n / 3) * 2)} to ${Math.max(4, Math.ceil(n / 3) * 4)} minutes. Progress shows bottom right.`;
+}
 function view1() {
   const e = S.env, ls = S.last_scrape;
   return head("1. Scrape jobs", "Apify finds Founder's Office jobs on LinkedIn. Companies and their jobs are saved to Airtable, duplicates are merged.") +
     (!e.apify || !e.airtable ? `<div class="note warn">${!e.apify ? "APIFY_TOKEN is not set. " : ""}${!e.airtable ? "AIRTABLE_TOKEN / AIRTABLE_BASE_ID are not set. " : ""}Add them as Codespaces secrets (or in .env) and restart.</div>` : "") +
     `<div class="card"><div class="filters"><div style="grid-column:span 2"><label class="f">Keywords (one per line)</label><textarea id="kw">${esc(S.keywords)}</textarea></div>
-      <div><label class="f">Location</label><input type="text" id="loc" value="India"></div><div><label class="f">Max jobs per keyword</label><input type="number" id="lim" value="100" min="10" max="1000"></div></div>
+      <div><label class="f">Location</label><input type="text" id="loc" value="${esc(S.scrape.loc)}"></div>
+      <div><label class="f">Max jobs per keyword</label><input type="number" id="lim" value="${S.scrape.limit}" min="10" max="1000"></div>
+      <div><label class="f">Posted</label><select id="dp">${[["pastMonth", "Past month"], ["pastWeek", "Past week"], ["anyTime", "Any time"], ["past24Hours", "Past 24 hours"]].map(([v, l]) => `<option value="${v}" ${S.scrape.date === v ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
       <div class="row" style="margin-top:12px"><button class="btn pri" data-act="scrape" ${S.job.running ? "disabled" : ""}>Run scrape</button>
-      <span class="mute">Takes 2 to 4 minutes. Progress shows bottom right. Costs about $0.30 per 1,000 jobs.</span></div></div>
+      <span class="mute" id="cost">${costText()}</span></div></div>
     <div class="card"><b>Airtable now</b><div class="row" style="margin-top:6px"><span class="chip">${S.companies ? S.companies.length : "..."} companies</span>
       ${ls ? `<span class="chip ok">last scrape: ${ls.jobs} jobs, ${ls.companies} companies</span>` : ""}
       <button class="btn sm" data-act="refresh">Refresh from Airtable</button><span class="grow"></span><button class="btn pri" data-act="go" data-n="2">Next: Apollo CSV</button></div>
@@ -248,18 +256,20 @@ function view3() {
   if (S.cerr) return head("3. ICP and overlap", "") + `<div class="note bad">${esc(S.cerr)}</div>`;
   const all = matched();
   if (!all.length) return head("3. ICP and overlap", "") + `<div class="card">No company has Apollo data yet. <button class="btn pri" data-act="go" data-n="2">Upload the Apollo CSV</button></div>`;
-  const sel = selectedList(), q = S.csearch.toLowerCase();
+  const f = S.icp, sel = selectedList(), q = S.csearch.toLowerCase();
   const pitch = sel.filter(c => c.inter && c.inter.pick && c.inter.pick.length).length;
   let rows = all.filter(c => !q || c.name.toLowerCase().includes(q));
   if (S.hideNon) rows = rows.filter(c => isSel(c));
   rows.sort((a, b) => (isSel(b) - isSel(a)) || a.name.localeCompare(b.name));
-  const f = S.icp, v = k => (f[k] == null ? "" : k.endsWith("max") && k !== "emp_max" ? fmt(f[k]) : f[k]);
+  const v = k => (f[k] == null ? "" : k.endsWith("max") && k !== "emp_max" ? fmt(f[k]) : f[k]);
   return head("3. ICP and overlap", "Tune the ICP, the matching companies are ticked live. Then check which of your clients each company also works with.") +
     `<div class="card"><div class="row"><b>ICP filter</b><span class="chip ok" id="icpcount">${all.filter(icpPass).length} of ${all.length} match</span><span class="grow"></span><button class="btn sm" data-act="reseticp">Reset</button></div>
       <div style="margin:8px 0">${stageChips()}</div>
+      <label class="row" style="gap:8px;margin:0 0 10px;cursor:pointer"><input type="checkbox" data-icp-bool="unknown_ok" ${f.unknown_ok ? "checked" : ""}>
+        <span><b>Include companies with no funding data</b> <span class="mute">(${all.filter(c => !c.stage && !c.excluded).length} here; only those with a known employee count inside the range below)</span></span></label>
       <div class="filters"><div><label class="f">Employees min</label><input type="number" data-icp="emp_min" value="${v("emp_min")}"></div><div><label class="f">Employees max</label><input type="number" data-icp="emp_max" value="${v("emp_max")}"></div>
       <div><label class="f">Revenue max (e.g. 5M)</label><input type="text" data-icp="rev_max" value="${v("rev_max")}" placeholder="no limit"></div><div><label class="f">Funding max (e.g. 10M)</label><input type="text" data-icp="funding_max" value="${v("funding_max")}" placeholder="no limit"></div></div>
-      <p class="mute" style="margin:8px 0 0">Unknown values pass the filter. Changing the filter re-ticks the list; your manual ticks are kept until then.</p></div>
+      <p class="mute" style="margin:8px 0 0">A missing employee count, revenue or funding amount does not fail the filter (except for no-funding companies above, which need a headcount). Changing the filter re-ticks the list; your manual ticks are kept until then.</p></div>
     <div class="card"><details ${S.clients.trim() ? "" : "open"}><summary><b>My clients</b> <span class="mute">${(S.clients.split("\n").filter(l => l.trim() && !l.trim().startsWith("#")).length)} listed. One per line, <code>Name | alias | alias</code>, put # in front to leave one out</span></summary>
       <textarea id="clients" style="margin-top:8px">${esc(S.clients)}</textarea><p class="mute" style="margin:6px 0 0">The names are written into emails to companies that also work with them. Only list clients you are free to mention.</p></details></div>
     <div class="card"><div class="row"><input type="text" id="csearch" placeholder="Search companies" value="${esc(S.csearch)}" style="max-width:240px"><label class="row mute" style="gap:6px"><input type="checkbox" id="hidenon" ${S.hideNon ? "checked" : ""}> only ticked</label><span class="grow"></span>
@@ -337,12 +347,15 @@ document.addEventListener("click", async e => {
   if (a === "chip") return;
   if (a === "choose") { if (e.target.closest("input")) return; return $("#" + el.dataset.target).click(); }
   if (a === "refresh") { await loadCompanies(true); toast("Refreshed from Airtable"); return render(); }
-  if (a === "scrape") { const kws = $("#kw").value; S.keywords = kws; return startedJob(await api("/api/scrape", {keywords: kws, location: $("#loc").value, limit: +$("#lim").value || null}), "scrape jobs"); }
+  if (a === "scrape") {
+    const kws = $("#kw").value; S.keywords = kws; S.scrape = {loc: $("#loc").value, limit: +$("#lim").value || 300, date: $("#dp").value};
+    return startedJob(await api("/api/scrape", {keywords: kws, location: S.scrape.loc, limit: S.scrape.limit, date_posted: S.scrape.date}), "scrape jobs");
+  }
   if (a === "stage") {
     const all = [...new Set(matched().map(c => c.stage).filter(Boolean))], cur = S.icp.stages || all.filter(s => SEEDRE.test(s)), s = el.dataset.s;
     S.icp.stages = cur.includes(s) ? cur.filter(x => x !== s) : [...cur, s]; S.manual = {}; persistIcp(); persistSelection(); return render();
   }
-  if (a === "reseticp") { S.icp = {stages: null, emp_min: 2, emp_max: 50, rev_max: null, funding_max: null}; S.manual = {}; persistIcp(); persistSelection(); return render(); }
+  if (a === "reseticp") { S.icp = {stages: null, emp_min: 2, emp_max: 50, rev_max: null, funding_max: null, unknown_ok: false}; S.manual = {}; persistIcp(); persistSelection(); return render(); }
   if (a === "intersect") {
     await api("/api/clients", {text: $("#clients") ? $("#clients").value : S.clients });
     return startedJob(await api("/api/intersect", {ids: selectedList().map(c => c.id)}), "find overlap");
@@ -380,6 +393,7 @@ document.addEventListener("change", async e => {
     const k = t.dataset.icp, raw = t.value.trim(); S.icp[k] = raw === "" ? null : (k.includes("max") && k !== "emp_max" ? money(raw) : +raw);
     S.manual = {}; persistIcp(); persistSelection(); return render();
   }
+  if (t.dataset.icpBool) { S.icp[t.dataset.icpBool] = t.checked; S.manual = {}; persistIcp(); persistSelection(); return render(); }
   if (t.id === "hidenon") { S.hideNon = t.checked; return render(); }
   if (t.dataset.appr) return approveToggle(+t.dataset.appr, t.checked);
   if (t.dataset.line) {
@@ -392,6 +406,8 @@ document.addEventListener("change", async e => {
 });
 document.addEventListener("input", e => {
   const t = e.target;
+  if (t.id === "kw") { S.keywords = t.value; $("#cost").textContent = costText(); }
+  if (t.id === "lim") { S.scrape.limit = +t.value || 0; $("#cost").textContent = costText(); }
   if (t.id === "csearch") { S.csearch = t.value; render(); }
   if (t.id === "qsearch") { S.qsearch = t.value; S.focus = 0; render(); }
 });
