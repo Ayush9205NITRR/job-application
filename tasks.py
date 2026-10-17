@@ -179,6 +179,14 @@ def apply_done(tasks=None, tables=None):
             bad = f"unreadable result: {e}"
         if bad:
             status, note = "Failed", bad
+        elif len(str(r.get("reason") or "").strip()) < 15:
+            # No evidence written: the label cannot be trusted. Send it back to the agent instead of applying it.
+            tries = int(t.get("Tries") or 0) + 1
+            tasks.update([(t["_id"], {"Status": "Failed" if tries > MAX_TRIES else "Open", "Tries": tries, "Result": "",
+                                      "Confidence": None, "Started at": None,
+                                      "Note": "no reason written, redo with a reason that says what you saw" if tries <= MAX_TRIES else "no reason after retries"})])
+            out["Reopened"] = out.get("Reopened", 0) + 1
+            continue
         elif t.get("Confidence") != "High":
             status, note = "Needs human", "agent was not sure, please look"
         else:

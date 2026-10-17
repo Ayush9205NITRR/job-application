@@ -43,9 +43,9 @@ def test_create_is_idempotent():
 
 
 def test_verify_applies_only_when_high_and_valid():
-    out, task, comp, _ = run(done("verify_company", {"same_company": True, "website": "https://acme.io", "stage": "Seed"}))
+    out, task, comp, _ = run(done("verify_company", {"same_company": True, "website": "https://acme.io", "stage": "Seed", "reason": "saw it on the company site and page"}))
     assert out["Applied"] == 1 and comp["Website"] == "https://acme.io" and comp["Funding stage"] == "Seed"
-    out, task, comp, _ = run(done("verify_company", {"same_company": True}, conf="Low"))
+    out, task, comp, _ = run(done("verify_company", {"same_company": True, "reason": "saw it on the company site and page"}, conf="Low"))
     assert out["Needs human"] == 1 and "Website" not in comp
     out, task, *_ = run(done("verify_company", {"same_company": "yes"}))
     assert out["Failed"] == 1 and "true or false" in task["Note"]
@@ -54,7 +54,7 @@ def test_verify_applies_only_when_high_and_valid():
 
 
 def test_decision_makers_create_contacts_and_reject_bad_roles():
-    good = {"people": [{"name": "Asha Rao", "title": "Co-founder", "role": "Founder", "linkedin": "https://www.linkedin.com/in/asha"}]}
+    good = {"people": [{"name": "Asha Rao", "title": "Co-founder", "role": "Founder", "linkedin": "https://www.linkedin.com/in/asha"}], "reason": "saw it on the company site and page"}
     out, _, _, cons = run(done("pick_decision_makers", good))
     assert out["Applied"] == 1 and cons[0]["First name"] == "Asha" and cons[0]["Last name"] == "Rao" and cons[0]["Company"] == ["c1"]
     out, task, _, cons = run(done("pick_decision_makers", {"people": [{"name": "X", "role": "CEO"}]}))
@@ -62,9 +62,9 @@ def test_decision_makers_create_contacts_and_reject_bad_roles():
 
 
 def test_classify_sets_status():
-    _, _, comp, _ = run(done("classify_post", {"kind": "recruiter"}))
+    _, _, comp, _ = run(done("classify_post", {"kind": "recruiter", "reason": "saw it on the company site and page"}))
     assert comp["Status"] == "Excluded"
-    _, _, comp, _ = run(done("classify_post", {"kind": "startup"}))
+    _, _, comp, _ = run(done("classify_post", {"kind": "startup", "reason": "saw it on the company site and page"}))
     assert comp["Status"] == "Needs review"
 
 
@@ -162,7 +162,7 @@ def test_verify_writes_company_facts_so_icp_can_run():
 
 
 def test_decision_maker_email_is_checked_and_saved():
-    ok = {"people": [{"name": "Asha Rao", "role": "Founder", "email": "Asha@Acme.io", "email_status": "verified"}]}
+    ok = {"people": [{"name": "Asha Rao", "role": "Founder", "email": "Asha@Acme.io", "email_status": "verified"}], "reason": "saw it on the company site and page"}
     _, _, _, cons = run(done("pick_decision_makers", ok))
     assert cons[0]["Email"] == "asha@acme.io" and cons[0]["Email status"] == "verified"
     for bad in ({"name": "X", "role": "HR", "email": "not-an-email"}, {"name": "X", "role": "HR", "email": "a@b.io", "email_status": "great"}):
@@ -175,3 +175,14 @@ def test_reopen_can_target_one_task_type():
               {"_id": "t2", "Company": "Voyaah", "Type": "pick_decision_makers", "Status": "Done"}])
     assert tasks.reopen(["voyaah@pick_decision_makers"], t) == 1
     assert [r["Status"] for r in t.rows] == ["Applied", "Open"]
+
+
+def test_task_without_reason_goes_back_to_the_agent_not_into_airtable():
+    tk = done("classify_post", {"kind": "startup"})
+    tk["Tries"] = 0
+    out, row, comp, _ = run(tk)
+    assert out.get("Reopened") == 1 and row["Status"] == "Open" and row["Tries"] == 1 and row["Result"] == ""
+    assert "Status" not in comp  # nothing was written to the company
+    tk2 = dict(done("classify_post", {"kind": "startup"}), Tries=2)
+    out, row, *_ = run(tk2)
+    assert row["Status"] == "Failed"
