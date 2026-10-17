@@ -7,7 +7,7 @@ Base: https://airtable.com/appms9ERcB5Ws3r0w , table `Tasks`. Use the Airtable w
 Filter the `Tasks` grid: `Status` is `Open`. Expand a row to work on it.
 
 ## Loop (one task at a time)
-1. Pick one `Open` row. Set `Status = Working`. Set `Started at` = current time in **UTC** (not IST; IST minus 5:30).
+1. Pick one `Open` row. Set `Status = Working`. Set `Started at` = current time in **UTC** (not IST; IST minus 5:30). `Started at` is MANDATORY on every task, never leave it empty.
 2. Read `Type` and `Input` (JSON). Do what that type asks (below). Open links when you can.
 3. Write ONE JSON object in `Result`. Nothing before or after it.
 4. Set `Confidence`: `High` only if you saw clear evidence. If you guessed, or could not open the link, set `Low`.
@@ -45,7 +45,9 @@ If the Apollo account you are logged into shows the company, prefer its numbers.
 Input: `{"company", "linkedin", "website", "people": [...]}`. `people` is usually empty: find founders / co-founders, and HR or TA people, from the company website and the public LinkedIn company page. Only list people you actually saw. Nobody found -> `{"people": []}` with `Confidence = Low`.
 Each person looks like `{"name", "title", "role", "linkedin", "email", "email_status"}`.
 `email` and `email_status` come from Apollo (or the company site) when you can see them; `email_status` is `verified`, `risky`, `invalid` or `unknown` exactly as Apollo shows it. Leave both out if no email is visible. Never guess or construct an email address.
-Result: `{"people": [{"name", "title", "role": "Founder|HR|TA", "linkedin": "https://linkedin.com/in/..."}]}`
+If you cannot open Apollo (not signed in, blocked), say so: set `Confidence = Low` and write `reason` as `no Apollo access, no email`. Do not stay silent about it.
+Result: `{"people": [{"name", "title", "role": "Founder|HR|TA", "linkedin": "https://linkedin.com/in/...", "email": "...", "email_status": "..."}], "reason": "where you saw them"}`
+`reason` is required here too: name the page you saw each person on (company site, LinkedIn company page, Apollo).
 Pick Founders and Co-founders, plus HR and Talent Acquisition. Several per company is fine. Skip the rest.
 
 ## Rules
