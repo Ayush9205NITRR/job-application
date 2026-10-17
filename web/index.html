@@ -103,6 +103,7 @@ function money(s) {
 }
 function fmt(n) { if (n == null) return "?"; if (n >= 1e9) return (n / 1e9).toFixed(1) + "B"; if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M"; if (n >= 1e3) return Math.round(n / 1e3) + "K"; return String(n); }
 function icpPass(c) {
+  if (c.excluded) return false;   // hard excludes (staffing, events, assistant roles) are never ICP
   const f = S.icp, ok = f.stages ? f.stages.includes(c.stage) : SEEDRE.test(c.stage);
   if (!ok) return false;
   if (c.employees_n != null) { if (f.emp_min != null && c.employees_n < f.emp_min) return false; if (f.emp_max != null && c.employees_n > f.emp_max) return false; }
@@ -276,7 +277,7 @@ function rowHtml(c) {
   const kind = !on ? "" : (i && i.pick.length ? '<span class="chip ok">Pitch</span>' : '<span class="chip">Generic</span>');
   const job = c.jobs[0] ? `<a href="${esc(c.jobs[0].url)}" target="_blank" rel="noopener">${esc(c.jobs[0].title)}</a>${c.jobs.length > 1 ? ` <small>+${c.jobs.length - 1}</small>` : ""}` : '<small>no job</small>';
   return `<tr class="${p ? "hi" : ""} ${on ? "" : "dim"}"><td><input type="checkbox" data-sel="${esc(c.id)}" ${on ? "checked" : ""} ${c.done ? "disabled" : ""}></td>
-    <td><b>${c.li ? `<a href="${esc(c.li)}" target="_blank" rel="noopener">${esc(c.name)}</a>` : esc(c.name)}</b>${c.done ? ` <span class="chip">${esc(c.status)}</span>` : ""}</td>
+    <td><b>${c.li ? `<a href="${esc(c.li)}" target="_blank" rel="noopener">${esc(c.name)}</a>` : esc(c.name)}</b>${c.done || c.excluded ? ` <span class="chip ${c.excluded ? "bad" : ""}">${esc(c.status)}</span>` : ""}</td>
     <td>${esc(c.stage) || "?"}</td><td class="num">${fmt(c.funding_n)}</td><td class="num">${fmt(c.revenue_n)}</td><td class="num">${c.employees_n ?? "?"}</td><td>${job}</td><td>${ov}</td><td>${kind}</td></tr>`;
 }
 

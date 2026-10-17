@@ -56,6 +56,7 @@ def serialize(c, inter=None):
     funding, revenue, emp = c.get("Total funding") or "", c.get("Annual revenue (Apollo)") or "", c.get("Employees (Apollo)") or ""
     return {"id": c["_id"], "name": c.get("Company") or "", "li": c.get("Company LinkedIn URL") or "", "website": c.get("Website") or "",
             "status": c.get("Status") or "", "shortlist": bool(c.get("Shortlist")), "done": c.get("Status") in DONE,
+            "excluded": c.get("Status") == "Excluded",
             "matched": bool(c.get("Apollo match")), "stage": (c.get("Funding stage") or "").strip(),
             "funding": funding, "funding_n": parse_money(funding), "revenue": revenue, "revenue_n": parse_money(revenue),
             "employees": emp, "employees_n": employees(emp),
@@ -123,6 +124,8 @@ def preview_apollo(path, comps=None):
     for row, ap, method in matches:
         methods[method] = methods.get(method, 0) + 1
         ok, why = icp({"Funding stage": ap.get("Funding stage", ""), "Employees (Apollo)": ap.get("Employees (Apollo)", "")})
+        if row.get("Status") == "Excluded":   # staffing, events, assistant roles: never ICP, whatever the funding says
+            ok, why = False, "hard-excluded (staffing, events, assistant role)"
         rows.append({"apollo": ap["name"], "company": row.get("Company") or "", "method": method, "stage": ap.get("Funding stage", ""),
                      "funding": ap.get("Total funding", ""), "revenue": ap.get("Annual revenue (Apollo)", ""),
                      "employees": ap.get("Employees (Apollo)", ""), "icp": ok, "why": why})

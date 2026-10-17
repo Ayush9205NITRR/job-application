@@ -28,6 +28,7 @@ def test_serialize_numbers_for_live_filtering():
     assert (s["stage"], s["funding_n"], s["revenue_n"], s["employees_n"], s["matched"]) == ("Seed", 2e6, 1.5e6, 12, True)
     assert s["jobs"][0]["url"] == "u" and s["inter"]["pick"] == ["X"]
     assert co.serialize({"_id": "r2", "Company": "B"})["matched"] is False
+    assert co.serialize({"_id": "r3", "Company": "C", "Status": "Excluded"})["excluded"] is True
 
 
 # ---- calendar ------------------------------------------------------------------------
@@ -314,6 +315,16 @@ def test_apollo_preview_writes_nothing_then_commit_writes(srv, monkeypatch, tmp_
     assert call(srv, "/api/apollo/commit", {})["_code"] == 400                                      # nothing pending any more
     call(srv, "/api/apollo", raw=csv)
     assert call(srv, "/api/apollo/discard", {})["ok"] and call(srv, "/api/apollo/commit", {})["_code"] == 400
+
+
+def test_preview_never_calls_a_hard_excluded_company_icp(tmp_path):
+    comps = [{"_id": "r1", "Company": "Staffing Co", "Company LinkedIn URL": "https://www.linkedin.com/company/staffco", "Status": "Excluded"},
+             {"_id": "r2", "Company": "Real Startup", "Company LinkedIn URL": "https://www.linkedin.com/company/real", "Status": "Needs review"}]
+    f = tmp_path / "a.csv"
+    f.write_text("Company Name,Company Linkedin Url,Funding Stage,# Employees\nStaffing Co,linkedin.com/company/staffco,Seed,10\nReal Startup,linkedin.com/company/real,Seed,10\n")
+    p = co.preview_apollo(f, comps)
+    assert p["icp"] == 1 and {r["company"]: r["icp"] for r in p["rows"]} == {"Staffing Co": False, "Real Startup": True}
+    assert "hard-excluded" in next(r["why"] for r in p["rows"] if r["company"] == "Staffing Co")
 
 
 def test_preview_apollo_matches_icp_and_reports_missing_columns(tmp_path):
