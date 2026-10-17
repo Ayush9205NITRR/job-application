@@ -21,14 +21,10 @@ from fo.rules import domain_of, norm_company_url
 KEY = "Company LinkedIn URL"
 # Airtable field -> (list of Apollo headers, normalised: lowercase, symbols stripped; field type)
 FIELDS = {
-    "Funding stage": (["latestfunding", "latestfundingstage"], "singleLineText"),
-    "Latest funding amount": (["latestfundingamount"], "singleLineText"),
-    "Total funding": (["totalfunding"], "singleLineText"),
-    "Employees (Apollo)": (["employees", "numberofemployees", "companysize"], "singleLineText"),
-    "Industry (Apollo)": (["industry"], "singleLineText"),
-    "Founded (Apollo)": (["foundedyear"], "singleLineText"),
-    "Annual revenue (Apollo)": (["annualrevenue"], "singleLineText"),
-    "About (Apollo)": (["shortdescription", "seodescription", "companydescription"], "multilineText"),
+    "Funding stage": (["fundingstage", "latestfunding", "latestfundingstage", "lastfundingtype", "latestfundingtype"], "singleLineText"),
+    "Total funding": (["totalfunding", "funding", "fundingamount", "totalfundingamount"], "singleLineText"),
+    "Annual revenue (Apollo)": (["annualrevenue", "revenue", "annualrevenuerange"], "singleLineText"),
+    "Employees (Apollo)": (["employees", "numberofemployees", "companysize", "employeecount"], "singleLineText"),
     "Apollo match": ([], "singleLineText"),  # how it matched: linkedin / domain / name
 }
 COMPANY_COLS = {"name": ["companyname", "company", "organization", "organizationname"],

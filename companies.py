@@ -1,4 +1,4 @@
-"""Company stage of the flow: Apollo company CSV -> Airtable, ICP highlight, shortlist, apply-calendar, POC import.
+"""Company side of the flow: Apollo account CSV -> Airtable, numeric ICP, overlap with my clients, apply-calendar, contacts import.
 
 Needs in the environment: AIRTABLE_TOKEN, AIRTABLE_BASE_ID (the base that holds Companies and Jobs).
 stdlib only at import time; `requests` is loaded lazily when Airtable is actually used.
@@ -7,6 +7,7 @@ import csv
 import hashlib
 import os
 import re
+import threading
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -22,19 +23,61 @@ def airtable_ready():
     return bool(os.environ.get("AIRTABLE_TOKEN") and os.environ.get("AIRTABLE_BASE_ID"))
 
 
+_UNITS = {"k": 1e3, "m": 1e6, "mn": 1e6, "million": 1e6, "b": 1e9, "bn": 1e9, "billion": 1e9,
+          "l": 1e5, "lac": 1e5, "lakh": 1e5, "cr": 1e7, "crore": 1e7}
+
+
+def parse_money(s):
+    """'$2.5M' -> 2500000, '1,200,000' -> 1200000, '5 Cr' -> 5e7. Ranges give the lower bound. None if no number."""
+    t = re.sub(r"(?i)usd|inr|rs\.?|[$\u20b9,]", "", str(s or "")).strip().lower()
+    m = re.match(r"(\d+(?:\.\d+)?)\s*([a-z]+)?", t)
+    if not m:
+        return None
+    return float(m.group(1)) * _UNITS.get(m.group(2) or "", 1)
+
+
 def employees(s):
-    m = re.search(r"\d[\d,]*", s or "")
-    return int(m.group().replace(",", "")) if m else None
+    n = parse_money(s)
+    return int(n) if n is not None else None
 
 
 def icp(c):
-    """Seed / pre-seed, 2 to 50 employees (REQUIREMENTS section 2.1). -> (is_icp, reason)."""
+    """Kept for the CLI path: seed / pre-seed, 2 to 50 employees. -> (is_icp, reason)."""
     stage, emp = (c.get("Funding stage") or "").strip(), employees(c.get("Employees (Apollo)"))
     if not SEED.search(stage):
         return False, f"stage: {stage or 'unknown'}"
     if emp is not None and not 2 <= emp <= 50:
         return False, f"{emp} employees"
     return True, "seed" + (f", {emp} employees" if emp else "")
+
+
+def serialize(c, inter=None):
+    """Compact JSON for the UI: the 4 Apollo parameters as text and as numbers (for live filtering)."""
+    funding, revenue, emp = c.get("Total funding") or "", c.get("Annual revenue (Apollo)") or "", c.get("Employees (Apollo)") or ""
+    return {"id": c["_id"], "name": c.get("Company") or "", "li": c.get("Company LinkedIn URL") or "", "website": c.get("Website") or "",
+            "status": c.get("Status") or "", "shortlist": bool(c.get("Shortlist")), "done": c.get("Status") in DONE,
+            "matched": bool(c.get("Apollo match")), "stage": (c.get("Funding stage") or "").strip(),
+            "funding": funding, "funding_n": parse_money(funding), "revenue": revenue, "revenue_n": parse_money(revenue),
+            "employees": emp, "employees_n": employees(emp),
+            "jobs": [{"title": j.get("Title") or "job", "url": j.get("Job URL") or ""} for j in c.get("jobs", [])],
+            "inter": (inter or {}).get(c["_id"])}
+
+
+_cache = {"rows": None}
+_cache_lock = threading.Lock()
+
+
+def get(refresh=False):
+    """Companies with jobs, cached in memory so the UI does not wait on Airtable for every click."""
+    with _cache_lock:
+        if refresh or _cache["rows"] is None:
+            _cache["rows"] = fetch()
+        return _cache["rows"]
+
+
+def invalidate():
+    with _cache_lock:
+        _cache["rows"] = None
 
 
 # ---- Airtable --------------------------------------------------------------
@@ -85,6 +128,14 @@ def save_shortlist(selected, shown):
         if f:
             updates.append((c["_id"], f))
     at.Companies.update(updates)
+    with _cache_lock:  # keep the cache in step so the next screen does not refetch
+        for c in _cache["rows"] or []:
+            if c["_id"] in shown:
+                c["Shortlist"] = c["_id"] in selected
+                if c["_id"] in selected and c.get("Status") not in DONE:
+                    c["Status"] = "Shortlisted"
+                elif c["_id"] not in selected and c.get("Status") == "Shortlisted":
+                    c["Status"] = "Needs review"
     return len(updates)
 
 
@@ -93,6 +144,7 @@ def mark_applied(company_ids):
     ids = set(company_ids)
     at.Companies.update([(i, {"Status": "Applied"}) for i in ids])
     at.Jobs.update([(j["_id"], {"Applied": True}) for j in at.Jobs.all() if ids & set(j.get("Company LinkedIn URL") or [])])
+    invalidate()
     return len(ids)
 
 
@@ -153,36 +205,64 @@ def make_ics(blocks, now=None):
     return "\r\n".join(_fold(l) for l in lines) + "\r\n"
 
 
-# ---- POC CSV -> queue rows -------------------------------------------------------
+# ---- Overlap with my clients (parallel, so 50 companies do not take 50 x 10 seconds) ---------------------
+def find_intersections(comps, clients, cache_dir, fetch=None, workers=8, progress=None, now=None):
+    """-> {company_id: {names, pick, note, at}}. `pick` starts as all matches; the user can untick names."""
+    from concurrent.futures import ThreadPoolExecutor
+    fetch = fetch or overlap.default_fetch
+    now = (now or datetime.now(timezone.utc)).isoformat()
+
+    def one(c):
+        site = c.get("Website") or ""
+        if not site:
+            return c["_id"], {"names": [], "pick": [], "note": "no website known", "at": now}
+        text = overlap.site_text(site, cache_dir, fetch)
+        names = overlap.match_clients(text, clients)
+        note = ("matches: " + ", ".join(names)) if names else ("no overlap found" if text else "site not readable")
+        return c["_id"], {"names": names, "pick": list(names), "note": note, "at": now}
+
+    out = {}
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for cid, r in ex.map(one, comps):
+            out[cid] = r
+            if progress:
+                progress(len(out), len(comps))
+    return out
+
+
+# ---- Contacts CSV -> queue rows ---------------------------------------------------------------------------
 POC_ALIASES = {
-    "li": ["companylinkedinprofile", "companylinkedinurl", "companylinkedin", "companyurl", "linkedin"],
-    "first": ["pocfirstname", "firstname", "first"], "last": ["poclastname", "lastname"],
-    "phone": ["poccontactno", "poccontactnumber", "pocphone", "contactno", "contactnumber", "phone", "mobilephone"],
+    "li": ["companylinkedin", "companylinkedinprofile", "companylinkedinurl", "companyurl", "linkedin"],
+    "first": ["pocfirstname", "pocnamefirstname", "pocname", "firstname", "first"], "last": ["poclastname", "lastname"],
+    "phone": ["poccontactdetail", "poccontactdetails", "poccontactno", "poccontactnumber", "pocphone", "contactdetail",
+              "contactdetails", "contactno", "contactnumber", "phone", "mobilephone"],
     "email": ["pocemail", "email", "emailaddress"], "status": ["emailstatus", "pocemailstatus"], "title": ["poctitle", "title"],
 }
 
 
-def import_pocs(path, verified, comps, proof, cache_dir, fetch=None, log=print):
-    """Add POCs of SHORTLISTED companies to queue.csv as drafts (never approved). -> (added, skipped dict).
-    `verified`: True/False answer to 'are these emails verified?' when the CSV has no Email Status column."""
+def import_pocs(path, verified, comps, pitch=None, log=print):
+    """Contacts of the SELECTED companies (comps with Shortlist true) -> queue.csv drafts, never approved.
+    pitch: {company_id: [client names to mention]}. No names -> the generic email.
+    `verified`: answer to 'are these emails verified?' when the CSV has no Email Status column.
+    -> (added, skipped dict, pitched count)"""
     from fo.rules import norm_company_url
-    fetch = fetch or overlap.default_fetch
+    pitch = pitch or {}
     by_li = {norm_company_url(c.get("Company LinkedIn URL")): c for c in comps if c.get("Shortlist")}
     rows = ob.load_queue()
     seen = {r["email"].lower() for r in rows}
-    skipped = {"company not shortlisted": 0, "unverified email": 0, "duplicate": 0, "excluded": 0, "missing name/email": 0}
-    texts, added = {}, 0
+    skipped = {"company not selected": 0, "unverified email": 0, "duplicate": 0, "excluded": 0, "missing name/email": 0}
+    added = pitched = 0
     with open(path, newline="", encoding="utf-8-sig") as f:
         for raw in csv.DictReader(f):
             r = {ob._norm(k): (v or "").strip() for k, v in raw.items() if k}
             pick = lambda k: next((r[a] for a in POC_ALIASES[k] if r.get(a)), "")
-            em, first, li = pick("email").lower(), pick("first"), norm_company_url(pick("li"))
+            em, first, li = pick("email").lower(), pick("first").split(" ")[0] if pick("first") else "", norm_company_url(pick("li"))
             if not em or not first:
                 skipped["missing name/email"] += 1
                 continue
             co = by_li.get(li)
             if not co:
-                skipped["company not shortlisted"] += 1
+                skipped["company not selected"] += 1
                 continue
             status = pick("status")
             if (status.lower() != "verified") if status else (not verified):
@@ -192,23 +272,20 @@ def import_pocs(path, verified, comps, proof, cache_dir, fetch=None, log=print):
                 skipped["duplicate"] += 1
                 continue
             name = co.get("Company") or ""
-            if ob.EXCLUDE.search(f"{name} | {co.get('Industry (Apollo)', '')}"):
+            if ob.EXCLUDE.search(name):
                 skipped["excluded"] += 1
                 continue
-            site = co.get("Website") or ""
-            if site and site not in texts:
-                log(f"reading {site} for overlap")
-                texts[site] = overlap.site_text(site, cache_dir, fetch)
-            ov = overlap.find_overlap(name, co.get("Industry (Apollo)", ""), texts.get(site, ""), proof)
+            names = pitch.get(co["_id"]) or []
             phone = ob.clean_phone(pick("phone"))
             row = {c: "" for c in ob.COLUMNS}
             row.update(email=em, first=first, company=name, title=pick("title"), phone=phone,
-                       about=re.sub(r"\s+", " ", co.get("About (Apollo)") or co.get("About") or "")[:300], company_li=li or "",
-                       overlap_note=ov["note"], suggested_line=ov["line"] if ov["level"] == "Medium" else "",
-                       **ob.build(first, name, em, phone, line=ov["line"] if ov["level"] == "High" else None))
+                       about=re.sub(r"\s+", " ", co.get("About") or "")[:300], company_li=li or "",
+                       pitch="; ".join(names), overlap_note=("pitch: " + ", ".join(names)) if names else "generic",
+                       **ob.build(first, name, em, phone, line=overlap.pitch_line(name, names) if names else None))
             rows.append(row)
             seen.add(em)
             added += 1
-            ob.save_queue(rows)
-    log(f"pocs: added {added}, skipped {skipped}")
-    return added, skipped
+            pitched += bool(names)
+    ob.save_queue(rows)
+    log(f"contacts: added {added} ({pitched} pitch, {added - pitched} generic), skipped {skipped}")
+    return added, skipped, pitched

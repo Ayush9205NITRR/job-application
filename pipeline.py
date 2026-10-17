@@ -27,10 +27,15 @@ DEFAULT_INPUT = {
 }
 
 
-def scrape() -> list[dict]:
+def scrape(keywords=None, location=None, limit=None, log=print) -> list[dict]:
     inp_file = ROOT / "apify_input.json"
     inp = dict(json.loads(inp_file.read_text()) if inp_file.exists() else DEFAULT_INPUT)
-    kws = inp.pop("keywords")
+    if location:
+        inp["location"] = location
+    if limit:
+        inp["limitPerSource"] = int(limit)
+    kws = keywords or inp.pop("keywords")
+    inp.pop("keywords", None)
     kws = [kws] if isinstance(kws, str) else kws
     actor = env("APIFY_ACTOR", "meka.im~linkedin-jobs-scraper", required=False)
     url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
@@ -38,10 +43,10 @@ def scrape() -> list[dict]:
     for kw in kws:
         try:
             got = request("POST", url, params={"token": env("APIFY_TOKEN")}, json={**inp, "keywords": kw}, timeout=900).json()
-            print(f"  {kw!r}: {len(got)} jobs")
+            log(f"  {kw!r}: {len(got)} jobs")
             items += got
         except RuntimeError as e:
-            print(f"  {kw!r}: FAILED {e}")
+            log(f"  {kw!r}: FAILED {e}")
             errors.append(e)
     if errors and not items:
         raise SystemExit("every scrape run failed")
@@ -117,23 +122,11 @@ def classify_new(companies: dict[str, list[dict]]) -> dict[str, dict]:
     return result
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--dump", help="write raw scraper items to this file")
-    ap.add_argument("--from-file", help="read raw items from file instead of scraping")
-    args = ap.parse_args()
-    at.DRY_RUN = args.dry_run
-
-    raw = json.loads(open(args.from_file).read()) if args.from_file else scrape()
-    if args.dump:
-        ROOT.joinpath(args.dump).parent.mkdir(parents=True, exist_ok=True)
-        ROOT.joinpath(args.dump).write_text(json.dumps(raw, indent=1))
-    print(f"scraped {len(raw)} jobs")
-
+def run(raw, log=print):
+    """Dedupe scraped jobs by company, classify, upsert into Airtable. Returns {companies, jobs, new}."""
     jobs = [normalise(r) for r in raw]
     companies = rules.group_by_company(jobs)
-    print(f"{len(companies)} unique companies ({len(jobs) - sum(map(len, companies.values()))} jobs dropped: no company URL / duplicate)")
+    log(f"{len(companies)} unique companies ({len(jobs) - sum(map(len, companies.values()))} jobs dropped: no company URL / duplicate)")
 
     existing = {c.get("Company LinkedIn URL"): c for c in at.Companies.all()}
     # Without Gemini, only brand-new companies get a placeholder; never overwrite a status set by hand.
@@ -173,7 +166,25 @@ def main():
     counts = {}
     for d in decisions.values():
         counts[d["Status"]] = counts.get(d["Status"], 0) + 1
-    print(f"classified {len(decisions)} new companies: {counts}; upserted {len(rows)} companies, {len(job_rows)} jobs")
+    log(f"classified {len(decisions)} new companies: {counts}; upserted {len(rows)} companies, {len(job_rows)} jobs")
+
+    return {"companies": len(rows), "jobs": len(job_rows), "new": len(decisions)}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--dump", help="write raw scraper items to this file")
+    ap.add_argument("--from-file", help="read raw items from file instead of scraping")
+    args = ap.parse_args()
+    at.DRY_RUN = args.dry_run
+
+    raw = json.loads(open(args.from_file).read()) if args.from_file else scrape()
+    if args.dump:
+        ROOT.joinpath(args.dump).parent.mkdir(parents=True, exist_ok=True)
+        ROOT.joinpath(args.dump).write_text(json.dumps(raw, indent=1))
+    print(f"scraped {len(raw)} jobs")
+    run(raw)
 
 
 if __name__ == "__main__":

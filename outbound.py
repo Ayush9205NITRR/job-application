@@ -39,7 +39,7 @@ QUEUE = Path(os.environ.get("OUTBOUND_QUEUE", Path(__file__).resolve().parent / 
 
 COLUMNS = ["approved", "email", "first", "company", "title", "phone", "about", "line", "subject", "body",
            "fu1", "fu2", "wa_link", "sent_at", "fu1_at", "fu2_at", "wa_shown", "message_id", "replied",
-           "company_li", "overlap_note", "suggested_line"]  # last three: added for the shortlist / overlap flow
+           "company_li", "overlap_note", "suggested_line", "pitch"]  # last four: added for the shortlist / overlap flow
 CLOSED = {"y", "skip", "bounced"}  # values of `replied` that stop the sequence
 
 # ---- Copy (REQUIREMENTS section 7). No em dashes. Rs not the rupee sign, to stay plain ASCII-safe. ----

@@ -1,10 +1,7 @@
-"""Overlap between a company's customers (read from its public website) and Ayush's own client list.
+"""Which of MY clients does a company ALSO work with? Read from the company's public website.
 
-No AI key needed: it looks for YOUR client names and industries in THEIR customers / case-studies / about text.
-  proof.csv columns: client, industry, persona, deal, name_usable
-  `deal` is written to continue the sentence "I ...", e.g. "ran their outbound pipeline and closed Rs 2.7 Cr".
-  name_usable = y/n. When n, the client name is never put in copy, only the industry.
-Respects robots.txt, reads at most 4 pages, caches each site for 90 days, never fetches private addresses.
+No AI key: it looks for my client names (and aliases) in their home / customers / case-studies / about pages.
+Respects robots.txt, reads at most 4 pages per site, caches each site for 90 days, never fetches private addresses.
 """
 import csv
 import ipaddress
@@ -30,17 +27,13 @@ def _nh(h):
     return re.sub(r"[^a-z0-9]", "", h.lower())
 
 
-def load_proof(path):
-    path = Path(path)
-    if not path.is_file():
-        return []
+def parse_clients(text):
+    """One client per line: `Name | alias | alias`. Lines starting with # are ignored. -> [{name, aliases}]"""
     out = []
-    with open(path, newline="", encoding="utf-8-sig") as f:
-        for raw in csv.DictReader(f):
-            r = {_nh(k): (v or "").strip() for k, v in raw.items() if k}
-            if r.get("client") or r.get("industry"):
-                out.append({"client": r.get("client", ""), "industry": r.get("industry", ""), "persona": r.get("persona", ""),
-                            "deal": r.get("deal", ""), "name_usable": r.get("nameusable", "").lower() in ("y", "yes", "true", "1")})
+    for line in (text or "").splitlines():
+        parts = [p.strip() for p in line.split("|") if p.strip()]
+        if parts and not parts[0].startswith("#"):
+            out.append({"name": parts[0], "aliases": parts[1:]})
     return out
 
 
@@ -160,30 +153,29 @@ def _has(low, term):
     return bool(term) and re.search(r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])", low) is not None
 
 
-def valid_line(s):
-    return bool(s) and len(s.split()) <= MAX_WORDS and "—" not in s and "–" not in s and "\n" not in s
+def _compact(s):
+    return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
-def find_overlap(company, company_industry, text, proof):
-    """-> {level: High|Medium|'', note, line}. High = one of YOUR clients is on THEIR site. Medium = same industry."""
-    if not proof:
-        return {"level": "", "note": "no client list uploaded", "line": ""}
-    low = (text or "").lower()
-    for p in proof:
-        if _has(low, p["client"]):
-            if p["name_usable"]:
-                line = f"I saw {company} works with {p['client']}, where I {p['deal']}."
-            else:
-                ind = p["industry"] or "a similar"
-                line = f"I saw {company} serves {ind} teams, and I {p['deal']} for one of them."
-            return _result("High", "same client: " + (p["client"] if p["name_usable"] else f"{p['industry'] or 'private'} client"), line)
-    for p in proof:
-        if p["industry"] and (_has(low, p["industry"]) or _has((company_industry or "").lower(), p["industry"])):
-            return _result("Medium", f"same industry: {p['industry']}", f"I saw {company} sells into {p['industry']}, a space where I {p['deal']}.")
-    return {"level": "", "note": "no overlap found" if text else "site text not available", "line": ""}
+def match_clients(text, clients):
+    """Names of MY clients found in `text`. A name matches as a whole word; names with a space also match
+    without it ("Mongo DB" finds "MongoDB"). Short names (under 5 letters) only match as whole words."""
+    low, flat, hits = (text or "").lower(), _compact(text or ""), []
+    for c in clients:
+        for term in [c["name"], *c.get("aliases", [])]:
+            if _has(low, term) or (" " in term.strip() and len(_compact(term)) >= 5 and _compact(term) in flat):
+                hits.append(c["name"])
+                break
+    return hits
 
 
-def _result(level, note, line):
-    if not valid_line(line):
-        return {"level": level, "note": note + " (suggested line too long, write it by hand)", "line": ""}
-    return {"level": level, "note": note, "line": line}
+def join_names(names):
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def pitch_line(company, names):
+    """Opening line when overlap exists. Claims only what Ayush supplied: that he has worked with these clients."""
+    if not names:
+        return ""
+    them = names[0] if len(names) == 1 else "them"
+    return f"I saw {company} works with {join_names(names)}. I have worked with {them} too."

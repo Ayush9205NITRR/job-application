@@ -9,13 +9,15 @@ Nothing is sent without `approved=y`. Plain text, no tracking, resume link only 
 3. Apollo: export People CSV (seed / pre-seed, 2 to 50 employees, Founder / Co-Founder / CEO).
 4. `python outbound.py draft apollo.csv`, then `python outbound.py cycle --dry` to read what would happen.
 
-## UI flow (tabs)
-1. **Companies**: upload the Apollo company CSV. It is matched onto the Airtable companies (LinkedIn slug, website, name) and funding / employees / industry are written into Airtable.
-2. **Shortlist**: seed or pre-seed, 2 to 50 employees = green and tickable. Save, then "download calendar (.ics)" for one apply block per weekday (open the file once, your calendar adds them). "Mark ticked as applied" when done.
-3. **POCs**: upload your clients once (`client, industry, persona, deal, name_usable`), then the POC CSV (`Company Linkedin Profile, POC First Name, POC Contact No, POC Email`). Each shortlisted company's public site is read (robots.txt respected) and compared with your clients: same client becomes the opening line, same industry is only suggested.
-4. **Review and send**: edit the line, approve, send. Follow-ups go out on day 5 and day 12.
+## The flow (one page, `python ui.py`)
+1. **Scrape jobs**: Apify finds Founder's Office jobs, companies + jobs go to Airtable (needs `APIFY_TOKEN`). LinkedIn *posts* need a second Apify actor, not connected yet.
+2. **Apollo CSV**: drop the account export (Company Linkedin Url or Website, Funding, Funding Stage, Revenue, Employees). It is matched onto the scraped companies.
+3. **ICP and overlap**: live filter on stage, employees, revenue, funding (default seed / pre-seed, 2 to 50 employees). Matches are ticked and highlighted. "Check overlap" reads each company's public site (home, customers, case studies, about; robots.txt respected, 8 in parallel) for **your clients** (editable list, `Name | alias`, `#` to leave one out). Matches become the pitch, click a name to leave it out. Also: calendar blocks (.ics) for applying, mark applied.
+4. **Contacts**: drop `Company Linkedin, POC First Name, POC Email, POC Contact Detail`. Only selected companies are added, as drafts. Companies with overlap get a pitch ("I saw X works with A and B. I have worked with them too."), the rest the generic email.
+5. **Review and send**: edit the opening line, approve (keys j k a s e x), send. Follow-ups go out on day 5 and day 12. Nothing is sent without approval and a Send click.
 
-Needs `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID` (in `.env` or Codespaces secrets) for tabs 1 to 3, and `pip install requests`.
+Needs `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID` for steps 1 to 4, `GMAIL_USER` / `GMAIL_APP_PASSWORD` for sending, `pip install requests`.
+It is fast because the page never reloads, Airtable is read once and cached, and edits are applied in the browser first and saved in the background.
 
 ## UI (easiest way)
 ```
