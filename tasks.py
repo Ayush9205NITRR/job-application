@@ -180,6 +180,18 @@ def seed_classify_post(names=None, n=5, tasks=None, companies=None, jobs=None):
     return made
 
 
+def where():
+    """Which base the secret points at (no secret printed): known ids are named, anything else is only counted."""
+    b = base_id()
+    known = {"appms9ERcB5Ws3r0w": "NEW working base (Job Tracker update)", "app40Dtij4xm0M2aW": "OLD base"}
+    meta = f"https://api.airtable.com/v0/meta/bases/{b}/tables"
+    names = [t["name"] for t in request("GET", meta, headers=_headers()).json()["tables"]]
+    print("base:", known.get(b, "UNKNOWN base"), "| tables:", names)
+    for n in ("Companies", "Jobs", "Tasks"):
+        if n in names:
+            print(f"  {n}: {len(at.Table(n).all())} rows")
+
+
 def setup():
     meta = f"https://api.airtable.com/v0/meta/bases/{base_id()}/tables"
     have = {t["name"] for t in request("GET", meta, headers=_headers()).json()["tables"]}
@@ -192,4 +204,4 @@ def setup():
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    {"setup": setup, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
+    {"setup": setup, "where": where, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
