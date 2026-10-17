@@ -351,3 +351,47 @@ def test_missing_credentials_message(monkeypatch):
     with pytest.raises(SystemExit) as e:
         ob.creds()
     assert "GMAIL_APP_PASSWORD" in str(e.value)
+
+
+def test_creds_strip_hidden_spaces(monkeypatch):
+    monkeypatch.setenv("GMAIL_USER", " me@gmail.com ")
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop\n")
+    assert ob.creds() == ("me@gmail.com", "abcdefghijklmnop")
+
+
+def test_smtp_falls_back_to_starttls_when_ssl_drops(monkeypatch):
+    log = []
+
+    class Drop(FakeSMTP):
+        def __init__(self, *a, **k):
+            raise ob.smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+
+    class Plain(FakeSMTP):
+        def __init__(self, *a, **k): log.append(("plain", a))
+        def starttls(self): log.append("starttls")
+    monkeypatch.setattr(ob.smtplib, "SMTP_SSL", Drop)
+    monkeypatch.setattr(ob.smtplib, "SMTP", Plain)
+    ob.smtp_connect().quit()
+    assert log == [("plain", ("smtp.gmail.com", 587)), "starttls"]
+
+
+def test_bad_password_not_retried_and_check_explains(monkeypatch):
+    tries = []
+
+    class Reject(FakeSMTP):
+        def __init__(self, *a, **k): tries.append(a)
+        def login(self, *a): raise ob.smtplib.SMTPAuthenticationError(535, b"bad")
+    monkeypatch.setattr(ob.smtplib, "SMTP_SSL", Reject)
+    with pytest.raises(SystemExit) as e:
+        ob.cmd_check()
+    assert len(tries) == 1 and "NEW app password" in str(e.value)
+
+
+def test_check_explains_dropped_connection(monkeypatch):
+    class Drop(FakeSMTP):
+        def __init__(self, *a, **k): raise ob.smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+    monkeypatch.setattr(ob.smtplib, "SMTP_SSL", Drop)
+    monkeypatch.setattr(ob.smtplib, "SMTP", Drop)
+    with pytest.raises(SystemExit) as e:
+        ob.cmd_check()
+    assert "Critical security alert" in str(e.value) and "SMTPServerDisconnected" in str(e.value)

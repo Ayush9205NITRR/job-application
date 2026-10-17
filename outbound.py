@@ -237,14 +237,29 @@ def creds():
     u, p = os.environ.get("GMAIL_USER"), os.environ.get("GMAIL_APP_PASSWORD")
     if not u or not p:
         sys.exit("Set GMAIL_USER and GMAIL_APP_PASSWORD (Gmail app password, IMAP enabled).")
-    return u, p
+    # App passwords are shown as 4 groups of 4; pasted copies often carry spaces or a non-breaking space.
+    return u.strip(), re.sub(r"\s+", "", p).strip("\"'")
 
 
 def smtp_connect():
+    """Gmail over SSL (465); if the server drops the connection, retry over STARTTLS (587).
+    A rejected password (535) is raised straight away, retrying cannot fix it."""
     u, p = creds()
-    s = smtplib.SMTP_SSL("smtp.gmail.com", 465)
-    s.login(u, p)
-    return s
+    last = None
+    for attempt in ("ssl", "starttls"):
+        try:
+            if attempt == "ssl":
+                s = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+            else:
+                s = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
+                s.starttls()
+            s.login(u, p)
+            return s
+        except smtplib.SMTPAuthenticationError:
+            raise
+        except (smtplib.SMTPException, OSError) as e:
+            last = e
+    raise last
 
 
 def imap_connect():
@@ -255,10 +270,20 @@ def imap_connect():
 
 
 def cmd_check():
-    """Log in to SMTP and IMAP without sending anything."""
-    u, _ = creds()
-    smtp_connect().quit()
-    imap_connect().logout()
+    """Log in to SMTP and IMAP without sending anything. Explains the usual failures instead of a traceback."""
+    u, p = creds()
+    log(f"trying {u} with a {len(p)} character app password (Google app passwords have 16)")
+    try:
+        smtp_connect().quit()
+        log("SMTP login OK")
+        imap_connect().logout()
+    except smtplib.SMTPAuthenticationError:
+        sys.exit("FAILED: Gmail rejected the username or app password. Make a NEW app password at myaccount.google.com/apppasswords "
+                 "(2-Step Verification must be on), paste it again, and check GMAIL_USER is the same account.")
+    except (smtplib.SMTPException, imaplib.IMAP4.error, OSError) as e:
+        sys.exit(f"FAILED: {type(e).__name__}: {e}\nGmail closed or refused the login. Usual causes: (1) the app password was copied wrongly, "
+                 "(2) Google blocked this server: open Gmail, look for a 'Critical security alert', press 'Yes, it was me', wait 10 minutes and retry, "
+                 "(3) too many tries in a row, wait 10 minutes. Run this on your laptop as a comparison.")
     log(f"OK: SMTP and IMAP login work for {u}")
 
 
