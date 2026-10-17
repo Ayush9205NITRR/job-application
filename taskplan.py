@@ -3,6 +3,7 @@
     python taskplan.py plan [--max 20] [--cap 100] [--dry]   create Open tasks, with per-type and daily caps
     python taskplan.py stats                                  counts, low-confidence rate, audit accuracy
     python taskplan.py audit                                  every 10th Applied task, for a human spot check
+    python taskplan.py step [--max 10]                        one full round: requeue, apply Done, plan next tasks, stats
     python taskplan.py cycle                                  requeue stuck, apply Done, then stats (safe to run on a schedule)
 
 Env TASK_LANES (default 1): tasks are spread round-robin over Lane 1..N so several agents never share a task."""
@@ -114,6 +115,11 @@ def main():
     elif cmd == "audit":
         for t in audit():
             print(f"- {t['Company']} | {t['Type']} | {t.get('Result', '')[:200]} -> set Audit to OK or Wrong")
+    elif cmd == "step":  # one round: free stuck tasks, apply what is Done, create the next tasks, report
+        print("requeued", T.requeue_stale())
+        print("applied", T.apply_done())
+        print("PLAN", plan(arg("--max", 10), arg("--cap", 100)))
+        print("STATS", json.dumps(stats(), indent=1))
     elif cmd == "cycle":
         print("requeued", T.requeue_stale())
         print("applied", T.apply_done())
