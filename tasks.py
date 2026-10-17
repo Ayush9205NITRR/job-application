@@ -192,6 +192,31 @@ def where():
             print(f"  {n}: {len(at.Table(n).all())} rows")
 
 
+EXPECTED = {"nextdimension": "startup", "taskforge": "startup", "sabihr": "recruiter", "aelum": "recruiter", "desklee": "other"}
+
+
+def show():
+    """Read-only: every task with its Result, and for the 5 known test companies whether the agent's answer is the right one."""
+    right = total = 0
+    for t in Tasks.all():
+        res = t.get("Result") or ""
+        print(f"- {t.get('Company')} | {t.get('Type')} | {t.get('Status')} | conf={t.get('Confidence')} | started={t.get('Started at')}")
+        print(f"    result: {res[:300]!r}")
+        key = next((k for k in EXPECTED if k in (t.get("Company") or "").lower()), None)
+        if key and t.get("Type") == "classify_post":
+            try:
+                got = json.loads(res).get("kind")
+            except (ValueError, AttributeError):
+                got = None
+            total += 1
+            right += got == EXPECTED[key]
+            print(f"    expected={EXPECTED[key]} got={got} -> {'OK' if got == EXPECTED[key] else 'WRONG'}")
+            bad = CHECKS["classify_post"](json.loads(res)) if got else "unreadable"
+            if bad:
+                print(f"    code check would say: {bad}")
+    print(f"MATCH {right}/{total}")
+
+
 def setup():
     meta = f"https://api.airtable.com/v0/meta/bases/{base_id()}/tables"
     have = {t["name"] for t in request("GET", meta, headers=_headers()).json()["tables"]}
@@ -204,4 +229,4 @@ def setup():
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    {"setup": setup, "where": where, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
+    {"setup": setup, "where": where, "show": show, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
