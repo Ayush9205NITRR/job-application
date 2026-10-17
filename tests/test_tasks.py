@@ -103,3 +103,17 @@ def test_reopen_clears_old_answer():
               {"_id": "t2", "Company": "SabiHR", "Status": "Done", "Result": "{}"}])
     assert tasks.reopen(["aelum"], t) == 1
     assert t.rows[0]["Status"] == "Open" and t.rows[0]["Result"] == "" and t.rows[1]["Status"] == "Done"
+
+
+def test_review_flags_real_problems():
+    good = {"Type": "classify_post", "Confidence": "High", "Started at": "2020-01-01T00:00:00.000Z",
+            "Result": json.dumps({"kind": "startup", "reason": "10 person AI product company hiring its own FO"})}
+    assert tasks.review(good)[0] == []
+    future = dict(good, **{"Started at": tasks.stamp(tasks.now() + tasks.timedelta(hours=5))})
+    assert any("future" in p for p in tasks.review(future)[0])
+    lazy = dict(good, Result=json.dumps({"kind": "startup"}))
+    assert any("reason" in p for p in tasks.review(lazy)[0])
+    assert tasks.review(dict(good, Result="oops"))[0] == ["Result is not valid JSON"]
+    v = {"Type": "verify_company", "Confidence": "High", "Started at": "2020-01-01T00:00:00.000Z",
+         "Result": json.dumps({"same_company": True, "reason": "website and LinkedIn match the name"})}
+    assert any("website" in p for p in tasks.review(v)[0])

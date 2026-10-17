@@ -206,26 +206,56 @@ def where():
 EXPECTED = {"nextdimension": "startup", "taskforge": "startup", "sabihr": "recruiter", "aelum": "services_firm", "desklee": "other"}
 
 
+def review(t, now_=None):
+    """Quality checks for one finished task -> (list of problems, parsed result or None). Pure, no I/O."""
+    now_, problems, res = now_ or now(), [], None
+    try:
+        res = json.loads(t.get("Result") or "")
+        if not isinstance(res, dict):
+            raise ValueError("not an object")
+    except ValueError:
+        return ["Result is not valid JSON"], None
+    bad = CHECKS[t["Type"]](res) if t.get("Type") in CHECKS else "unknown type"
+    if bad:
+        problems.append(f"fails code check: {bad}")
+    if len(str(res.get("reason") or "").strip()) < 15:
+        problems.append("no real reason written")
+    if not t.get("Confidence"):
+        problems.append("Confidence empty")
+    started = t.get("Started at")
+    if not started:
+        problems.append("Started at empty")
+    else:
+        try:
+            when = datetime.fromisoformat(started.replace("Z", "+00:00"))
+            if when > now_ + timedelta(minutes=5):
+                problems.append(f"Started at is in the future ({started}), probably IST not UTC")
+        except ValueError:
+            problems.append("Started at unreadable")
+    if t.get("Type") == "verify_company" and res.get("same_company") is True and t.get("Confidence") == "High" and not res.get("website"):
+        problems.append("High confidence but no website given")
+    return problems, res
+
+
 def show():
-    """Read-only: every task with its Result, and for the 5 known test companies whether the agent's answer is the right one."""
-    right = total = 0
+    """Read-only: every finished task with its Result and quality problems; the 5 known test companies also get a right/wrong verdict."""
+    right = total = clean = n = 0
     for t in Tasks.all():
-        res = t.get("Result") or ""
+        if t.get("Status") not in ("Done", "Applied", "Needs human", "Failed"):
+            print(f"- {t.get('Company')} | {t.get('Type')} | {t.get('Status')}  (not finished)")
+            continue
+        n += 1
+        problems, res = review(t)
+        clean += not problems
         print(f"- {t.get('Company')} | {t.get('Type')} | {t.get('Status')} | conf={t.get('Confidence')} | started={t.get('Started at')}")
-        print(f"    result: {res[:300]!r}")
+        print(f"    result: {(t.get('Result') or '')[:300]!r}")
+        print(f"    problems: {'; '.join(problems) or 'none'}")
         key = next((k for k in EXPECTED if k in (t.get("Company") or "").lower()), None)
-        if key and t.get("Type") == "classify_post":
-            try:
-                got = json.loads(res).get("kind")
-            except (ValueError, AttributeError):
-                got = None
+        if key and t.get("Type") == "classify_post" and res:
             total += 1
-            right += got == EXPECTED[key]
-            print(f"    expected={EXPECTED[key]} got={got} -> {'OK' if got == EXPECTED[key] else 'WRONG'}")
-            bad = CHECKS["classify_post"](json.loads(res)) if got else "unreadable"
-            if bad:
-                print(f"    code check would say: {bad}")
-    print(f"MATCH {right}/{total}")
+            right += res.get("kind") == EXPECTED[key]
+            print(f"    expected={EXPECTED[key]} got={res.get('kind')} -> {'OK' if res.get('kind') == EXPECTED[key] else 'WRONG'}")
+    print(f"CLEAN {clean}/{n} finished tasks have no format problems; KNOWN-ANSWER MATCH {right}/{total}")
 
 
 def reopen(names, tasks=None):
