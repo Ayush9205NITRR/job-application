@@ -339,6 +339,23 @@ def post(path, body, raw, headers):
         return {"ics": companies.make_ics(blocks), "blocks": len(blocks)}
     if path == "/api/applied":
         return {"n": companies.mark_applied(body.get("ids", []))}
+    if path == "/api/contacts_airtable":
+        if not companies.airtable_ready():
+            raise ApiError(400, "Airtable is not connected.")
+        from fo import airtable as at
+        st = load_state()
+        csv_path = tempfile.mktemp(suffix=".csv")
+        try:
+            n = companies.contacts_to_csv(csv_path, at.Contacts.all(), at.Companies.all())
+            with QLOCK:
+                added, skipped, pitched = companies.import_pocs(
+                    csv_path, False, selected_comps(), {k: v["pick"] for k, v in st["inter"].items()}, log=lambda *a: ob.log(*a))
+        except Exception as e:
+            raise ApiError(400, f"Could not read the agent's contacts: {e}")
+        finally:
+            if os.path.exists(csv_path):
+                os.unlink(csv_path)
+        return {"added": added, "pitched": pitched, "generic": added - pitched, "skipped": skipped, "found": n}
     if path == "/api/contacts":
         if not companies.airtable_ready():
             raise ApiError(400, "Airtable is not connected, the selected companies are needed.")

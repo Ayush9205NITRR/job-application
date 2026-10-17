@@ -285,6 +285,21 @@ POC_ALIASES = {
 }
 
 
+def contacts_to_csv(path, contacts, comps):
+    """Contacts the agent found (Airtable Contacts table) -> a CSV that import_pocs reads. Rows without an email or company are left out."""
+    li_of = {c["_id"]: c.get("Company LinkedIn URL") or "" for c in comps}
+    n = 0
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["Company Linkedin", "POC First Name", "POC Last Name", "POC Email", "Email Status", "Title"])
+        for p in contacts:
+            li = next((li_of[i] for i in p.get("Company") or [] if li_of.get(i)), "")
+            if p.get("Email") and p.get("First name") and li:
+                w.writerow([li, p["First name"], p.get("Last name", ""), p["Email"], p.get("Email status", ""), p.get("Title", "")])
+                n += 1
+    return n
+
+
 def import_pocs(path, verified, comps, pitch=None, log=print):
     """Contacts of the SELECTED companies (comps with Shortlist true) -> queue.csv drafts, never approved.
     pitch: {company_id: [client names to mention]}. No names -> the generic email.

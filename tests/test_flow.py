@@ -504,3 +504,15 @@ def test_scrape_posts_endpoint_validates_and_records_summary(srv, monkeypatch):
     assert seen == {"qs": ["hiring founder's office", "hiring chief of staff"], "per": 500, "posted": "month"}   # cap on cost, bad value ignored
     st = call(srv, "/api/state")
     assert st["last_posts"]["posts"] == 4 and st["last_posts"]["dropped"]["person"] == 3 and st["post_queries"].startswith("hiring founder's office")
+
+
+def test_contacts_from_airtable_become_csv_rows(tmp_path):
+    import csv as _csv
+    import companies
+    comps = [{"_id": "c1", "Company LinkedIn URL": "https://www.linkedin.com/company/acme"}]
+    people = [{"First name": "Asha", "Last name": "Rao", "Email": "asha@acme.io", "Email status": "verified", "Title": "Founder", "Company": ["c1"]},
+              {"First name": "NoMail", "Company": ["c1"]}, {"First name": "Orphan", "Email": "o@x.io", "Company": []}]
+    p = tmp_path / "c.csv"
+    assert companies.contacts_to_csv(str(p), people, comps) == 1
+    rows = list(_csv.DictReader(open(p)))
+    assert rows[0]["Company Linkedin"].endswith("/acme") and rows[0]["POC Email"] == "asha@acme.io" and rows[0]["Email Status"] == "verified"

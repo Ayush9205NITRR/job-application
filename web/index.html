@@ -309,6 +309,7 @@ function view4() {
   return head("4. Contacts", "Upload the people you want to email: <b>Company Linkedin</b>, <b>POC First Name</b>, <b>POC Email</b>, <b>POC Contact Detail</b>. Only people at your <b>selected</b> companies are added, as drafts.") +
     `<div class="card"><div class="row"><b>These emails are</b><div class="tabs" style="margin:0"><span class="tab ${S.verified === "no" ? "on" : ""}" data-act="ver" data-v="no">Not verified (skip them)</span><span class="tab ${S.verified === "yes" ? "on" : ""}" data-act="ver" data-v="yes">Verified</span></div>
       <span class="mute">Unverified emails hurt your Gmail reputation. A file with an Email Status column is judged per row.</span></div>
+      <div style="margin-top:12px"><button class="btn pri" data-act="airtablepocs">Add the people the agent found (from Airtable)</button> <span class="mute">Only verified emails at your selected companies. They are drafts, nothing is sent.</span></div>
       <div class="drop" id="drop4" style="margin-top:12px" data-act="choose" data-target="file4"><b>Drop the contacts CSV here</b> or click to choose<input id="file4" type="file" accept=".csv" hidden></div>
       ${r ? `<div class="note ok" style="margin-top:12px">Added <b>${r.added}</b> drafts: ${r.pitched} pitch, ${r.generic} generic. Skipped: ${Object.entries(r.skipped).filter(([, v]) => v).map(([k, v]) => `${esc(k)} ${v}`).join(", ") || "none"}.</div>` : ""}
       ${r && r.added ? `<button class="btn pri" data-act="go" data-n="5">Review the drafts</button>` : ""}</div>
@@ -389,6 +390,14 @@ document.addEventListener("click", async e => {
     return;
   }
   if (a === "ver") { S.verified = el.dataset.v; return render(); }
+  if (a === "airtablepocs") {
+    try {
+      clearTimeout(saveTimer);
+      await api("/api/select", {selected: selectedList().map(c => c.id), shown: matched().map(c => c.id)});
+      S.contactsResult = await api("/api/contacts_airtable", {}); await reloadStats();
+    } catch {}
+    return render();
+  }
   if (a === "copyneed") { const need = selectedList().filter(c => !new Set(S.queue.map(x => x.company)).has(c.name)); await navigator.clipboard.writeText(need.map(c => c.li).join("\n")); return toast("Copied"); }
   if (a === "qf") { S.qfilter = el.dataset.t; S.focus = 0; return render(); }
   if (a === "appr") {

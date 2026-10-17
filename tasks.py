@@ -53,12 +53,22 @@ def _url(v):
     return isinstance(v, str) and re.match(r"^https?://[^\s]+$", v) is not None
 
 
+EXTRA = ("stage", "total_funding", "revenue", "employees")  # optional company facts the agent found (Apollo or the web)
+
+
 def check_verify_company(r):
     if not isinstance(r.get("same_company"), bool):
         return "same_company must be true or false"
     if r["same_company"] and r.get("website") and not _url(r["website"]):
         return "website must be a full http(s) url"
+    for k in EXTRA:
+        if r.get(k) is not None and not isinstance(r[k], (str, int, float)):
+            return f"{k} must be text or a number"
     return None
+
+
+EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+EMAIL_STATUS = ("verified", "risky", "invalid", "unknown")
 
 
 def check_pick_decision_makers(r):
@@ -70,6 +80,10 @@ def check_pick_decision_makers(r):
             return f"each person needs name and role in {ROLES}"
         if p.get("linkedin") and not re.match(r"^https://([a-z]+\.)?linkedin\.com/in/", p["linkedin"]):
             return "linkedin must be a /in/ profile url"
+        if p.get("email") and not EMAIL.match(p["email"]):
+            return f"email looks wrong: {p['email']}"
+        if p.get("email_status") not in (None, *EMAIL_STATUS):
+            return f"email_status must be one of {EMAIL_STATUS}"
     return None
 
 
@@ -92,20 +106,23 @@ def apply_verify_company(task, r, tables):
     if not r["same_company"]:
         tables["Companies"].update([(task["Company record"], {"Status": "Needs review"})])
         return "not the same company, left for review"
-    fields = {k: v for k, v in {"Website": r.get("website"), "Funding stage": r.get("stage")}.items() if v}
+    facts = {"Website": r.get("website"), "Funding stage": r.get("stage"), "Total funding": r.get("total_funding"),
+             "Annual revenue (Apollo)": r.get("revenue"), "Employees (Apollo)": r.get("employees")}
+    fields = {k: str(v) for k, v in facts.items() if v not in (None, "")}
     if not fields:
         return "updated nothing"
+    fields["Apollo match"] = "agent"  # same meaning as the CSV match: this company now has verified facts
     try:
         tables["Companies"].update([(task["Company record"], fields)])
     except RuntimeError as e:
-        if "UNKNOWN_FIELD_NAME" not in str(e) or "Funding stage" not in fields:
+        if "UNKNOWN_FIELD_NAME" not in str(e):
             raise
-        # The base has no Funding stage column yet (it appears with the Apollo import): keep the website, say what was skipped.
-        stage = fields.pop("Funding stage")
-        if fields:
-            tables["Companies"].update([(task["Company record"], fields)])
-        return f"updated {', '.join(fields) or 'nothing'}; stage '{stage}' not saved (no Funding stage column yet)"
-    return f"updated {', '.join(fields)}"
+        # Columns missing in this base (run `tasks.py setup` to add them): keep what fits, say what was skipped.
+        keep = {k: v for k, v in fields.items() if k == "Website"}
+        if keep:
+            tables["Companies"].update([(task["Company record"], keep)])
+        return f"updated {', '.join(keep) or 'nothing'}; {', '.join(set(fields) - set(keep))} not saved (columns missing, run setup)"
+    return f"updated {', '.join(k for k in fields if k != 'Apollo match')}"
 
 
 def apply_pick_decision_makers(task, r, tables):
@@ -116,6 +133,9 @@ def apply_pick_decision_makers(task, r, tables):
                "Company": [task["Company record"]]}
         if p.get("linkedin"):
             row["LinkedIn URL"] = p["linkedin"]
+        if p.get("email"):
+            row["Email"] = p["email"].strip().lower()
+            row["Email status"] = p.get("email_status") or "unknown"
         rows.append(row)
     if rows:
         tables["Contacts"].create(rows)
@@ -312,7 +332,10 @@ CONTACT_FIELDS = [
     {"name": "LinkedIn URL", "type": "url"},
     {"name": "Contact type", "type": "singleSelect", "options": {"choices": [{"name": r} for r in (*ROLES, "Job poster")]}},
     {"name": "Stage", "type": "singleSelect", "options": {"choices": [{"name": s} for s in ("New", "Drafted", "Approved", "Sent", "Replied", "Do not contact")]}},
+    {"name": "Email status", "type": "singleSelect", "options": {"choices": [{"name": s} for s in EMAIL_STATUS]}},
 ]
+COMPANY_FIELDS = [{"name": n, "type": "singleLineText"} for n in
+                  ("Funding stage", "Total funding", "Annual revenue (Apollo)", "Employees (Apollo)", "Apollo match")]
 
 
 def setup():
@@ -328,6 +351,13 @@ def setup():
             if f["name"] not in have:
                 request("POST", f"{meta}/{tables['Tasks']['id']}/fields", headers=_headers(), json=f)
                 print("added field Tasks." + f["name"])
+    for table, wanted in (("Companies", COMPANY_FIELDS), ("Contacts", CONTACT_FIELDS)):
+        if table in tables:
+            have = {f["name"] for f in tables[table]["fields"]}
+            for f in wanted:
+                if f["name"] not in have:
+                    request("POST", f"{meta}/{tables[table]['id']}/fields", headers=_headers(), json=f)
+                    print(f"added field {table}.{f['name']}")
     if "Contacts" not in tables:
         made = request("POST", meta, headers=_headers(), json={"name": "Contacts", "fields": CONTACT_FIELDS}).json()
         request("POST", f"{meta}/{made['id']}/fields", headers=_headers(), json={

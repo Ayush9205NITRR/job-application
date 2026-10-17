@@ -36,10 +36,15 @@ Examples:
 Input: `{"company", "linkedin", "website", "search_results": [...]}` (`search_results` is often empty: search the web yourself, e.g. "<company> funding", their website and LinkedIn page)
 Result: `{"same_company": true|false, "website": "https://...", "stage": "Pre-Seed|Seed|Series A|...", "reason": "..."}`
 `same_company` is true only if the results clearly describe this exact company. If unsure, `Confidence = Low`.
+Also fill these when you can find them (Apollo, Crunchbase, Tracxn, the company site). Leave a key out when you did not see it; never guess:
+`"employees": 12, "total_funding": "$2M", "revenue": "$1M", "stage": "Seed"`. Say where you saw each in `reason`.
+
+If the Apollo account you are logged into shows the company, prefer its numbers.
 
 ## pick_decision_makers
 Input: `{"company", "linkedin", "website", "people": [...]}`. `people` is usually empty: find founders / co-founders, and HR or TA people, from the company website and the public LinkedIn company page. Only list people you actually saw. Nobody found -> `{"people": []}` with `Confidence = Low`.
-Each person looks like `{"name", "title", "linkedin"}`.
+Each person looks like `{"name", "title", "role", "linkedin", "email", "email_status"}`.
+`email` and `email_status` come from Apollo (or the company site) when you can see them; `email_status` is `verified`, `risky`, `invalid` or `unknown` exactly as Apollo shows it. Leave both out if no email is visible. Never guess or construct an email address.
 Result: `{"people": [{"name", "title", "role": "Founder|HR|TA", "linkedin": "https://linkedin.com/in/..."}]}`
 Pick Founders and Co-founders, plus HR and Talent Acquisition. Several per company is fine. Skip the rest.
 

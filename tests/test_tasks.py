@@ -149,3 +149,22 @@ def test_reopen_takes_applied_tasks_and_seed_dm_is_idempotent():
     assert tasks.reopen(["voyaah"], t) == 1 and t.rows[0]["Status"] == "Open"
     comps, t2 = Fake([{"_id": "c1", "Company": "Voyaah", "Company LinkedIn URL": "u"}]), Fake()
     assert tasks.seed_dm(["voy"], t2, comps) == ["Voyaah"] and tasks.seed_dm(["voy"], t2, comps) == []
+
+
+def test_verify_writes_company_facts_so_icp_can_run():
+    comps = Fake([{"_id": "c1"}])
+    t = Fake([done("verify_company", {"same_company": True, "website": "https://a.io", "stage": "Seed", "employees": 12,
+                                      "total_funding": "$2M", "reason": "found on Crunchbase and site"})])
+    out = tasks.apply_done(t, {"Companies": comps, "Contacts": Fake()})
+    assert out["Applied"] == 1
+    c = comps.rows[0]
+    assert c["Funding stage"] == "Seed" and c["Employees (Apollo)"] == "12" and c["Total funding"] == "$2M" and c["Apollo match"] == "agent"
+
+
+def test_decision_maker_email_is_checked_and_saved():
+    ok = {"people": [{"name": "Asha Rao", "role": "Founder", "email": "Asha@Acme.io", "email_status": "verified"}]}
+    _, _, _, cons = run(done("pick_decision_makers", ok))
+    assert cons[0]["Email"] == "asha@acme.io" and cons[0]["Email status"] == "verified"
+    for bad in ({"name": "X", "role": "HR", "email": "not-an-email"}, {"name": "X", "role": "HR", "email": "a@b.io", "email_status": "great"}):
+        out, task, *_ = run(done("pick_decision_makers", {"people": [bad]}))
+        assert out["Failed"] == 1, task["Note"]
