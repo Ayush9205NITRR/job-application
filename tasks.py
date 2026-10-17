@@ -271,6 +271,16 @@ def show():
     print(f"CLEAN {clean}/{n} finished tasks have no format problems; KNOWN-ANSWER MATCH {right}/{total}")
 
 
+def readback():
+    """Read-only: each task's Status and Note next to what its company looks like in Airtable now."""
+    comps = {c["_id"]: c for c in at.Companies.all()}
+    for t in sorted(Tasks.all(), key=lambda t: t.get("Company") or ""):
+        c = comps.get(t.get("Company record"), {})
+        print(f"- {t.get('Company')} | {t.get('Type')} | task={t.get('Status')} | company Status={c.get('Status')} | Website={c.get('Website') or '-'} | Funding stage={c.get('Funding stage', '(no column)')}")
+        if t.get("Note"):
+            print(f"    note: {t['Note'][:200]}")
+
+
 def reopen(names, tasks=None):
     """Put finished tasks back to Open (clears Result, Confidence, Started at) so the agent redoes them. Match by company name substring."""
     tasks, n = tasks or Tasks, 0
@@ -312,4 +322,4 @@ def setup():
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    {"setup": setup, "reopen": lambda: print("reopened", reopen([x.strip() for x in sys.argv[2].split("|") if x.strip()])), "where": where, "show": show, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
+    {"setup": setup, "readback": readback, "reopen": lambda: print("reopened", reopen([x.strip() for x in sys.argv[2].split("|") if x.strip()])), "where": where, "show": show, "seed": lambda: print("seeded", seed_classify_post([x.strip() for x in sys.argv[2].split("|") if x.strip()] if len(sys.argv) > 2 else None)), "apply": lambda: print(apply_done()), "requeue": lambda: print("requeued", requeue_stale())}.get(cmd, lambda: print(__doc__))()
