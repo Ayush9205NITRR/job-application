@@ -62,13 +62,14 @@ Result: `{"kind": "...", "reason": "..."}`
 
 ### verify_company
 Input: `{"company", "linkedin", "website", "search_results"}`. `search_results` is usually empty: search the web yourself (Apollo company page if signed in, read only, never spend credits; Crunchbase, Tracxn, the company website, LinkedIn page).
-Result: `{"same_company": true|false, "website": "https://...", "stage": "Seed", "employees": "11-50", "total_funding": "$2M", "revenue": "...", "reason": "..."}`
+Result: `{"same_company": true|false, "website": "https://...", "stage": "Seed", "employees": "11-50", "total_funding": "$2M", "revenue": "...", "hook": "...", "reason": "..."}`
+- `hook`: ONE sentence (under 240 characters, no em dash) that opens Ayush's email to this company. It must name something specific and recent you SAW about the company (a launch, a new market, a funding round, the hiring post itself) and link it to B2B sales or building revenue. Example: `Saw that Acme just opened its Bengaluru office and is hiring its first sales team.` No flattery, no guessing. Leave it out if you saw nothing specific.
 `same_company` is true only if the sources clearly describe this exact company. Include `employees`, `total_funding`, `stage`, `revenue` only when you saw them. Never guess.
 
 ### pick_decision_makers
 Input: `{"company", "linkedin", "website", "people": []}`. Find founders and co-founders, plus HR and Talent Acquisition people, from the company site, the public LinkedIn company page, and Apollo.
 Result: `{"people": [{"name", "title", "role": "Founder|HR|TA", "linkedin": "https://linkedin.com/in/..."}], "reason": "..."}`
-- Several people per company is fine. Skip everyone else.
+- At most **3 people** per company: founders and co-founders first, then HR, then Talent Acquisition. Skip everyone else.
 - **LinkedIn profile URL is the deliverable. Do NOT collect emails.** Ayush finds emails himself elsewhere. Do not put `email` or `email_status` in the Result (code ignores them anyway).
 - **Apollo credits are not to be spent.** Use Apollo only to read name, title and LinkedIn URL from the free people search list. NEVER click "Access email", "Reveal", "Get email", "Get phone", "Enrich", "Export", "Add to list" or any button that says credit. If the only way to see a LinkedIn URL costs a credit, take it from the company site or the public LinkedIn company page instead; if you cannot, leave `linkedin` out for that person.
 - Person with a name, role and a LinkedIn URL you really saw: `Confidence = High`.

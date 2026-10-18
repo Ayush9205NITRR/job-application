@@ -11,8 +11,8 @@ from fo.http import request
 
 EXPECTED_BASE = "appms9ERcB5Ws3r0w"
 NEED_ENV = ("AIRTABLE_TOKEN", "AIRTABLE_BASE_ID")
-NEED_COLUMNS = {"Companies": ("Company LinkedIn URL", "Status", "Source", "Funding stage"), "Tasks": ("Task ID", "Status", "Result"),
-                "Emails": ("To", "Status", "Step"), "Contacts": ("Email", "Email status", "LinkedIn URL"), "Your tasks": ("Key", "Status")}
+NEED_COLUMNS = {"Companies": ("Company LinkedIn URL", "Status", "Source", "Funding stage", "Hook"), "Runs": ("Run", "Keyword", "New"), "Tasks": ("Task ID", "Status", "Result"),
+                "Emails": ("To", "Status", "Step"), "Contacts": ("Email", "Email status", "LinkedIn URL"), "Your tasks": ("Key", "Status", "Mailed")}
 
 
 def problems(env=None, tables=None, expected=EXPECTED_BASE, need=NEED_ENV):

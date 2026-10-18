@@ -447,7 +447,7 @@ def test_scrape_runs_keywords_in_parallel_and_survives_a_failure(monkeypatch):
     assert all(p["limitPerSource"] == 300 and p["datePosted"] == "pastMonth" and p["location"] == "India" and p["scrapeCompany"] for p in posted)
     assert any("FAILED" in l and "bad" in l for l in logs)
     monkeypatch.setattr(pipeline, "request", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("down")))
-    with pytest.raises(SystemExit):
+    with pytest.raises(RuntimeError, match="every scrape run failed"):
         pipeline.scrape(["a", "b"], log=lambda *a: None)
 
 
@@ -471,6 +471,7 @@ def test_posts_to_jobs_keeps_only_company_posts_about_our_roles():
              {"id": "", "content": "x"}]
     jobs, st = pipeline.posts_to_jobs(items)
     assert [j["job_id"] for j in jobs] == ["post-1", "post-6"]
+    assert st.pop("by_query") == {"": {"total": 9, "kept": 2, "person": 1, "job board or recruiter": 1, "not our roles": 1, "hard excluded": 1, "duplicate": 2, "showcase page": 1}}
     assert st == {"total": 9, "kept": 2, "person": 1, "job board or recruiter": 1, "not our roles": 1, "hard excluded": 1, "duplicate": 2, "showcase page": 1}
     j = jobs[0]
     assert j["company_url"] == "https://www.linkedin.com/company/acme-labs" and j["company"] == "Acme Labs"
@@ -479,17 +480,26 @@ def test_posts_to_jobs_keeps_only_company_posts_about_our_roles():
     assert pipeline.rules.group_by_company(jobs).keys() == {"https://www.linkedin.com/company/acme-labs", "https://www.linkedin.com/company/delta"}
 
 
-def test_scrape_posts_sends_one_run_with_all_queries(monkeypatch):
+def test_scrape_posts_runs_once_per_keyword_and_tags_posts(monkeypatch):
     import pipeline
     monkeypatch.setenv("APIFY_TOKEN", "t")
-    sent = {}
+    sent = []
 
     class R:
         def json(self): return [{"id": "1"}, {"id": "2"}]
-    monkeypatch.setattr(pipeline, "request", lambda m, url, **kw: sent.update(url=url, body=kw["json"]) or R())
+    monkeypatch.setattr(pipeline, "request", lambda m, url, **kw: sent.append((url, kw["json"])) or R())
     out = pipeline.scrape_posts(["a", "b"], 25, "week", log=lambda *a: None)
-    assert len(out) == 2 and "harvestapi~linkedin-post-search" in sent["url"]
-    assert sent["body"] == {"searchQueries": ["a", "b"], "maxPosts": 25, "postedLimit": "week", "sortBy": "date"}
+    assert len(out) == 4 and all("harvestapi~linkedin-post-search" in u for u, _ in sent)
+    assert sorted(b["searchQueries"][0] for _, b in sent) == ["a", "b"] and sent[0][1]["maxPosts"] == 25
+    assert sorted({o["_query"] for o in out}) == ["a", "b"]
+
+
+def test_dedupe_stats_per_keyword():
+    import pipeline
+    J = lambda q, slug: {"query": q, "company_url": f"https://www.linkedin.com/company/{slug}"}
+    st = pipeline.dedupe_stats([J("a", "x"), J("a", "y"), J("b", "x"), J("b", "z")], {"https://www.linkedin.com/company/y"})
+    assert st["a"] == {"unique companies": 2, "new": 1, "already listed": 1, "seen in another keyword": 0}
+    assert st["b"] == {"unique companies": 1, "new": 1, "already listed": 0, "seen in another keyword": 1}
 
 
 def test_scrape_posts_endpoint_validates_and_records_summary(srv, monkeypatch):
@@ -516,3 +526,9 @@ def test_contacts_from_airtable_become_csv_rows(tmp_path):
     assert companies.contacts_to_csv(str(p), people, comps) == 1
     rows = list(_csv.DictReader(open(p)))
     assert rows[0]["Company Linkedin"].endswith("/acme") and rows[0]["POC Email"] == "asha@acme.io" and rows[0]["Email Status"] == "verified"
+
+
+def test_runs_rows_one_per_keyword():
+    import runs
+    rows = runs.rows_for("r1", "linkedin_posts", {"a": {"total": 10, "kept": 4, "person": 6}}, {"a": {"unique companies": 3, "new": 2, "already listed": 1}, "b": {"unique companies": 1, "new": 1}})
+    assert [(r["Keyword"], r["Raw"], r["New"], r["Dropped"]) for r in rows] == [("a", 10, 2, "person 6"), ("b", 0, 1, "-")]

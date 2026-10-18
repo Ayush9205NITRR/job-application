@@ -12,16 +12,20 @@ if [ "${DRY_RUN:-}" != "1" ]; then
   step python tasks.py setup
   step python emails.py setup
   step python alerts.py setup
+  step python runs.py setup
 fi
 pf=""; [ "$job" = "fetch" ] && [ "${DRY_RUN:-}" != "1" ] && pf="--apify"
 python preflight.py $pf || { python alerts.py check; exit 1; }
 
 if [ "$job" = "fetch" ]; then
-  if [ "${DRY_RUN:-}" = "1" ]; then echo "DRY: would run Apify posts push (about 0.50 USD)"; else step python posts_push.py --per 50; fi
+  if [ "${DRY_RUN:-}" = "1" ]; then echo "DRY: would run Apify posts push (about 0.50 USD)"; else step python fetch.py --per 50; fi
 fi
 step python taskplan.py round --max 10
 step python followups.py
 step python scorecard.py
 step python report.py
+step python alerts.py scan
+[ "${DRY_RUN:-}" != "1" ] && step python alerts.py digest
+step python dashboard.py
 python alerts.py check || fail=1
 exit $fail

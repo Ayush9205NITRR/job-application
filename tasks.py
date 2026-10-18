@@ -65,6 +65,8 @@ def check_verify_company(r):
     for k in EXTRA:
         if r.get(k) is not None and not isinstance(r[k], (str, int, float)):
             return f"{k} must be text or a number"
+    if r.get("hook") is not None and (not isinstance(r["hook"], str) or len(r["hook"]) > 240 or "\u2014" in r["hook"]):
+        return "hook must be one sentence under 240 characters, no em dash"
     return None
 
 
@@ -108,7 +110,7 @@ def apply_verify_company(task, r, tables):
         tables["Companies"].update([(task["Company record"], {"Status": "Needs review"})])
         return "not the same company, left for review"
     facts = {"Website": r.get("website"), "Funding stage": r.get("stage"), "Total funding": r.get("total_funding"),
-             "Annual revenue (Apollo)": r.get("revenue"), "Employees (Apollo)": r.get("employees")}
+             "Annual revenue (Apollo)": r.get("revenue"), "Employees (Apollo)": r.get("employees"), "Hook": r.get("hook")}
     fields = {k: str(v) for k, v in facts.items() if v not in (None, "")}
     if not fields:
         return "updated nothing"
@@ -126,9 +128,18 @@ def apply_verify_company(task, r, tables):
     return f"updated {', '.join(k for k in fields if k != 'Apollo match')}"
 
 
+MAX_PEOPLE = 3
+RANK = {"Founder": 0, "HR": 1, "TA": 2}
+
+
 def apply_pick_decision_makers(task, r, tables):
-    rows = []
-    for p in r["people"]:
+    rows, seen = [], set()
+    people = sorted(r["people"], key=lambda p: RANK.get(p.get("role"), 9))  # founders first, then HR, then TA
+    for p in people:
+        key = (p.get("linkedin") or p["name"]).lower().rstrip("/")
+        if key in seen or len(rows) >= MAX_PEOPLE:
+            continue
+        seen.add(key)
         first, _, last = p["name"].partition(" ")
         row = {"First name": first, "Last name": last, "Title": p.get("title", ""), "Contact type": p["role"], "Stage": "New",
                "Company": [task["Company record"]]}
@@ -353,7 +364,7 @@ CONTACT_FIELDS = [
     {"name": "Email status", "type": "singleSelect", "options": {"choices": [{"name": s} for s in EMAIL_STATUS]}},
 ]
 COMPANY_FIELDS = [{"name": n, "type": "singleLineText"} for n in
-                  ("Funding stage", "Total funding", "Annual revenue (Apollo)", "Employees (Apollo)", "Apollo match", "Source")]
+                  ("Funding stage", "Total funding", "Annual revenue (Apollo)", "Employees (Apollo)", "Apollo match", "Source", "Hook")]
 
 
 def setup():

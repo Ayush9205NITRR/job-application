@@ -242,3 +242,38 @@ def test_agent_emails_are_ignored_by_default():
 
 def test_setup_field_lists_exist():
     assert {f["name"] for f in tasks.COMPANY_FIELDS} >= {"Funding stage", "Source"} and tasks.CONTACT_FIELDS[0]["name"] == "Email"
+
+
+def test_notify_apply_once_and_emails_self_close():
+    import alerts
+    table = Fake()
+    comps = [{"_id": "c1", "Company": "Acme", "Shortlist": True, "Funding stage": "Seed"}, {"_id": "c2", "Company": "Gone", "Shortlist": True, "Status": "Excluded"}]
+    jobs = [{"Job URL": "https://lnkd/p1", "Company LinkedIn URL": ["c1"]}, {"Job URL": "https://lnkd/p2", "Company LinkedIn URL": ["c2"]}]
+    people = [{"First name": "Asha", "Title": "CEO", "LinkedIn URL": "https://linkedin.com/in/asha", "Company": ["c1"]}]
+    assert alerts.notify(comps, jobs, people, table) == ["apply_c1", "emails_c1"]
+    assert "https://lnkd/p1" in table.rows[0]["Steps"] and alerts.CV in table.rows[0]["Steps"]
+    table.rows[0]["Status"] = "Done"
+    people[0]["Email"] = "asha@acme.io"
+    assert alerts.notify(comps, jobs, people, table) == []  # applied stays done, email row closes itself
+    assert [r["Status"] for r in table.rows] == ["Done", "Done"] and alerts.blocking(table.rows) == []
+
+
+def test_digest_mails_new_rows_once():
+    import alerts
+    table = Fake([{"_id": "r1", "Key": "apply_c1", "Title": "Apply now: Acme", "Steps": "1. Open x", "Status": "Open"}])
+    sent = []
+    assert alerts.digest(table, send=lambda s, b: sent.append((s, b))) == 1 and "Apply now: Acme" in sent[0][1]
+    assert alerts.digest(table, send=lambda s, b: sent.append((s, b))) == 0 and table.rows[0]["Mailed"] is True
+
+
+def test_decision_makers_capped_at_three_founders_first():
+    ppl = [{"name": f"P{i}", "role": r, "linkedin": f"https://www.linkedin.com/in/p{i}"} for i, r in enumerate(["TA", "HR", "Founder", "Founder", "TA"])]
+    ppl.append(dict(ppl[2]))  # same person twice
+    _, _, _, cons = run(done("pick_decision_makers", {"people": ppl, "reason": "company site team page and LinkedIn"}))
+    assert [c["Contact type"] for c in cons] == ["Founder", "Founder", "HR"]
+
+
+def test_verify_hook_saved_and_checked():
+    r = {"same_company": True, "website": "https://acme.io", "hook": "Acme just opened a Gurugram office for its sales team.", "reason": "saw it on the careers page"}
+    assert tasks.check_verify_company(r) is None
+    assert tasks.check_verify_company(dict(r, hook="x" * 300))

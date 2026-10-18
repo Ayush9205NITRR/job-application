@@ -23,7 +23,9 @@ FIELDS = [
     {"name": "Steps", "type": "multilineText"},
     {"name": "Status", "type": "singleSelect", "options": {"choices": [{"name": "Open"}, {"name": "Done"}]}},
     {"name": "Created at", "type": "dateTime", "options": {"dateFormat": {"name": "iso"}, "timeFormat": {"name": "24hour"}, "timeZone": "utc"}},
+    {"name": "Mailed", "type": "checkbox", "options": {"icon": "check", "color": "greenBright"}},
 ]
+CV = "https://tinyurl.com/at-nitrr-resume"
 
 APIFY = ("apify_token", "Replace the Apify token (credits or limit used up)",
          "1. console.apify.com > Settings > API & Integrations: copy a token from an account with credit.\n"
@@ -46,11 +48,11 @@ def classify_error(text):
     return None
 
 
-def raise_alert(key, title, steps, table=None):
-    """Idempotent: one Open row per key. Never raises (the alert must not hide the real error)."""
+def raise_alert(key, title, steps, table=None, once=False, rows=None):
+    """Idempotent: one Open row per key (once=True: one row ever, so a Done row is not reopened). Never raises."""
     table = table or Table
     try:
-        if any(r.get("Key") == key and r.get("Status") != "Done" for r in table.all()):
+        if any(r.get("Key") == key and (once or r.get("Status") != "Done") for r in (rows if rows is not None else table.all())):
             return False
         table.create([{"Key": key, "Title": title, "Steps": steps, "Status": "Open", "Created at": T.stamp()}])
         return True
@@ -95,15 +97,55 @@ def scan(tasks=None, emails=None, table=None, now_=None):
     return sorted(want)
 
 
-INFO = ("agent_waiting", "drafts_waiting")  # things to do, but not a broken run: shown, never fail the workflow
+INFO = ("agent_waiting", "drafts_waiting", "apply_", "emails_")  # your to-dos, not a broken run: shown, never fail the workflow
 
 
 def blocking(rows):
-    return [r for r in rows if r.get("Key") not in INFO]
+    return [r for r in rows if not str(r.get("Key") or "").startswith(INFO)]
+
+
+def notify(companies, jobs, contacts, table=None):
+    """Your to-dos from the data: apply now (shortlisted company with a job or post link), and find emails
+    (decision makers found with LinkedIn but no email). Apply rows are made once; email rows close themselves."""
+    table = table or Table
+    rows = table.all()
+    jobs_of, people_of, made = {}, {}, []
+    for j in jobs:
+        for cid in j.get("Company LinkedIn URL") or []:
+            jobs_of.setdefault(cid, []).append(j)
+    for p in contacts:
+        for cid in p.get("Company") or []:
+            people_of.setdefault(cid, []).append(p)
+    for c in companies:
+        cid, name = c["_id"], c.get("Company") or "?"
+        if c.get("Status") == "Excluded":
+            continue
+        links = [j["Job URL"] for j in jobs_of.get(cid, []) if j.get("Job URL")][:3]
+        if c.get("Shortlist") and links:
+            facts = ", ".join(str(c[k]) for k in ("Funding stage", "Employees (Apollo)") if c.get(k))
+            steps = "\n".join([f"{i}. Open {u}" for i, u in enumerate(links, 1)] + [f"Apply with your CV: {CV}", "Set this row to Done when applied."])
+            if raise_alert(f"apply_{cid}", f"Apply now: {name}" + (f" ({facts})" if facts else ""), steps, table, once=True, rows=rows):
+                made.append(f"apply_{cid}")
+        need = [p for p in people_of.get(cid, []) if p.get("LinkedIn URL") and not p.get("Email")]
+        key = f"emails_{cid}"
+        if need:
+            steps = "\n".join(f"- {p.get('First name', '')} {p.get('Last name', '')}, {p.get('Title') or p.get('Contact type') or ''}: {p['LinkedIn URL']}" for p in need)
+            steps += "\nPaste each email in Contacts > Email and set Email status = verified. The personalised email is then written for you."
+            if raise_alert(key, f"Find emails: {name}, {len(need)} people", steps, table, rows=rows):
+                made.append(key)
+        else:
+            for r in rows:
+                if r.get("Key") == key and r.get("Status") != "Done":
+                    table.update([(r["_id"], {"Status": "Done"})])
+    return made
 
 
 def open_rows(table=None):
-    return [r for r in (table or Table).all() if r.get("Status") != "Done"]
+    return open_rows_from((table or Table).all())
+
+
+def open_rows_from(rows):
+    return [r for r in rows if r.get("Status") != "Done"]
 
 
 def show(table=None):
@@ -116,10 +158,35 @@ def show(table=None):
 
 def setup():
     meta = f"https://api.airtable.com/v0/meta/bases/{base_id()}/tables"
-    names = {t["name"] for t in request("GET", meta, headers=_headers()).json()["tables"]}
-    if "Your tasks" not in names:
+    tables = {t["name"]: t for t in request("GET", meta, headers=_headers()).json()["tables"]}
+    if "Your tasks" not in tables:
         request("POST", meta, headers=_headers(), json={"name": "Your tasks", "fields": FIELDS})
         print("created Your tasks table")
+        return
+    have = {f["name"] for f in tables["Your tasks"]["fields"]}
+    for f in FIELDS:
+        if f["name"] not in have:
+            request("POST", f"{meta}/{tables['Your tasks']['id']}/fields", headers=_headers(), json=f)
+            print("added Your tasks." + f["name"])
+
+
+def digest(table=None, send=None):
+    """Email you the new rows (needs GMAIL_USER + GMAIL_APP_PASSWORD secrets; without them the agent's report carries them)."""
+    import os
+    table = table or Table
+    if not send and not (os.environ.get("GMAIL_USER") and os.environ.get("GMAIL_APP_PASSWORD")):
+        print("digest: no Gmail secrets, skipped (the agent report lists these)")
+        return 0
+    new = [r for r in open_rows(table) if not r.get("Mailed")]
+    if not new:
+        return 0
+    body = "\n\n".join(f"{r.get('Title')}\n{r.get('Steps')}" for r in new) + "\n\nAll of it: Airtable > Your tasks."
+    if send is None:
+        import outbound
+        send = outbound.send_self
+    send(f"[Outbound] {len(new)} things for you", body)
+    table.update([(r["_id"], {"Mailed": True}) for r in new])
+    return len(new)
 
 
 if __name__ == "__main__":
@@ -128,10 +195,14 @@ if __name__ == "__main__":
         setup()
     elif cmd == "scan":
         print("open:", scan())
+        print("new to-dos:", notify(at.Companies.all(), at.Jobs.all(), at.Contacts.all()))
+    elif cmd == "digest":
+        print("mailed", digest())
     elif cmd == "list":
         show()
     elif cmd == "check":
         scan()
+        notify(at.Companies.all(), at.Jobs.all(), at.Contacts.all())
         rows = show()
         sys.exit(1 if blocking(rows) else 0)  # only a real wall (token, limit, wrong setup) turns the run red
     else:

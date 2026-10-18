@@ -46,7 +46,8 @@ def scrape(keywords=None, location=None, limit=None, date_posted=None, log=print
 
     def one(kw):  # the actor takes one keyword per run, so run several at once
         try:
-            return kw, request("POST", url, params={"token": env("APIFY_TOKEN")}, json={**inp, "keywords": kw}, timeout=900).json(), None
+            got = request("POST", url, params={"token": env("APIFY_TOKEN")}, json={**inp, "keywords": kw}, timeout=900).json()
+            return kw, [dict(g, _query=kw) for g in got], None
         except RuntimeError as e:
             return kw, [], e
 
@@ -60,7 +61,7 @@ def scrape(keywords=None, location=None, limit=None, date_posted=None, log=print
                 log(f"  {kw!r}: {len(got)} jobs")
                 items += got
     if errors and not items:
-        raise SystemExit("every scrape run failed")
+        raise RuntimeError(f"every scrape run failed: {errors[0]}")  # names the wall (token, credit) for alerts.guard
     return items
 
 
@@ -72,13 +73,28 @@ POST_ROLE = re.compile(r"founder['\u2019]?s?\s+office|chief of staff|business de
 JOB_BOARD = re.compile(r"jobs?\b|vacanc|recruit|hiring|career|placement|staffing|manpower|talent|remote(?!ly)|ajira|\bhub\b|chakri|tempjobs", re.I)
 
 
-def scrape_posts(queries=None, max_posts=50, posted_limit="month", sort_by="date", log=print) -> list[dict]:
-    """One actor run for all queries. max_posts is per query. Costs about $0.002 per post."""
+def scrape_posts(queries=None, max_posts=50, posted_limit="month", sort_by="date", log=print, workers=3) -> list[dict]:
+    """One actor run per query (same cost, about $0.002 per post), so each post carries its keyword in `_query`."""
+    from concurrent.futures import ThreadPoolExecutor
     actor = env("APIFY_POSTS_ACTOR", "harvestapi~linkedin-post-search", required=False)
-    inp = {"searchQueries": queries or POST_QUERIES, "maxPosts": int(max_posts), "postedLimit": posted_limit, "sortBy": sort_by}
     url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
-    items = request("POST", url, params={"token": env("APIFY_TOKEN")}, json=inp, timeout=1800).json()
-    log(f"  {len(inp['searchQueries'])} queries: {len(items)} posts")
+    qs = queries or POST_QUERIES
+
+    def one(q):
+        inp = {"searchQueries": [q], "maxPosts": int(max_posts), "postedLimit": posted_limit, "sortBy": sort_by}
+        try:
+            return q, request("POST", url, params={"token": env("APIFY_TOKEN")}, json=inp, timeout=1800).json(), None
+        except RuntimeError as e:
+            return q, [], e
+
+    items, errors = [], []
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(qs)))) as ex:
+        for q, got, err in ex.map(one, qs):
+            log(f"  {q!r}: " + (f"FAILED {err}" if err else f"{len(got)} posts"))
+            errors += [err] if err else []
+            items += [dict(g, _query=q) for g in got]
+    if errors and not items:
+        raise RuntimeError(str(errors[0]))  # the first error names the wall (token, credit) for alerts.guard
     return items
 
 
@@ -87,8 +103,10 @@ def posts_to_jobs(items):
     Kept: posts by a COMPANY page, about a role we care about, not from a job board or recruiter, not an assistant role.
     Posts by people are counted but dropped: they carry no company link to match on."""
     from collections import Counter
-    jobs, seen, st = [], set(), Counter()
+    jobs, seen, st, by_q = [], set(), Counter(), {}
     for it in items:
+        q = it.get("_query") or ""
+        before = Counter(st)
         st["total"] += 1
         a = it.get("author") or {}
         text = (it.get("content") or "").strip()
@@ -112,8 +130,11 @@ def posts_to_jobs(items):
             jobs.append({"job_id": "post-" + pid, "title": "[Post] " + title, "job_url": it.get("linkedinUrl") or it.get("shareLinkedinUrl") or "",
                          "posted": (it.get("postedAt") or {}).get("date"), "location": "", "poster": "", "poster_url": "",
                          "company": a.get("name") or "", "company_url": f"https://www.linkedin.com/company/{a['universalName']}",
-                         "website": "", "headcount": None, "industry": "", "description": text[:1000], "about": ""})
-    return jobs, dict(st)
+                         "website": "", "headcount": None, "industry": "", "description": text[:1000], "about": "", "query": q})
+        by_q.setdefault(q, Counter()).update(st - before)
+    st = dict(st)
+    st["by_query"] = {q: dict(c) for q, c in by_q.items()}
+    return jobs, st
 
 
 def run_posts(items, log=print, only_new=False):
@@ -121,12 +142,30 @@ def run_posts(items, log=print, only_new=False):
     log(f"posts: {st}")
     if only_new and jobs:
         listed = {c.get("Company LinkedIn URL") for c in at.Companies.all()}
-        keep = [j for j in jobs if rules.group_by_company([j]) and next(iter(rules.group_by_company([j]))) not in listed]
+        st["dedupe"] = dedupe_stats(jobs, listed)
+        keep = [j for j in jobs if rules.norm_company_url(j.get("company_url")) not in listed]
         log(f"only new: {len(keep)} of {len(jobs)} posts are from companies not in Airtable yet")
         jobs = keep
     if not jobs:
         return {"companies": 0, "jobs": 0, "new": 0, "posts": st}
     return {**run_normalised(jobs, log, source="linkedin_posts"), "posts": st}
+
+
+def dedupe_stats(jobs, listed):
+    """Per keyword: unique companies found, how many are new, how many were already listed (dedupe on company LinkedIn URL)."""
+    out, seen = {}, set()
+    for j in jobs:
+        u = rules.norm_company_url(j.get("company_url"))
+        if not u:
+            continue
+        d = out.setdefault(j.get("query") or "", {"unique companies": 0, "new": 0, "already listed": 0, "seen in another keyword": 0})
+        if u in seen:
+            d["seen in another keyword"] += 1
+            continue
+        seen.add(u)
+        d["unique companies"] += 1
+        d["already listed" if u in listed else "new"] += 1
+    return out
 
 
 def pick(item: dict, *keys, default=None):
@@ -154,6 +193,7 @@ def normalise(item: dict) -> dict:
         "industry": pick(item, "industries", "industry", "companyIndustry", default=""),
         "description": pick(item, "descriptionText", "description", "jobDescription", default=""),
         "about": pick(item, "companyDescription", default=""),
+        "query": item.get("_query") or "",
     }
 
 

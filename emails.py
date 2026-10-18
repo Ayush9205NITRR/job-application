@@ -82,7 +82,7 @@ def build(contacts=None, companies=None, jobs=None, emails=None, update_contacts
         first = (c.get("First name") or "").split(" ")[0]
         if not first:
             continue
-        built = ob.build(first, company.get("Company") or "", c["Email"].lower())
+        built = ob.build(first, company.get("Company") or "", c["Email"].lower(), line=company.get("Hook") or None)
         rows.append({"Subject": built["subject"], "To": c["Email"].lower(), "First name": first, "Company": company.get("Company") or "",
                      "Body": built["body"], "Context": context(company, by_company.get(company["_id"], [])), "Contact record": c["_id"],
                      "Step": "Email 1", "Status": "Ready for Gmail draft"})

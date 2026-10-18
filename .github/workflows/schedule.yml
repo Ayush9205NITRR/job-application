@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 20
     env:
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
       AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
       AIRTABLE_BASE_ID: appms9ERcB5Ws3r0w  # pinned: the secret may still point at the OLD base
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry && '1' || '' }}

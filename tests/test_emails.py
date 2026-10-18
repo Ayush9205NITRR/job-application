@@ -75,7 +75,7 @@ def test_preflight_names_each_known_mistake():
     assert [k for k, _ in preflight.problems({}, None)] == ["missing_secret", "missing_secret"]
     short = dict(ok, Companies=["Status"])
     assert {k for k, _ in preflight.problems(good, short)} == {"missing_column"}
-    assert [k for k, _ in preflight.problems(good, {"Tasks": ok["Tasks"]})].count("missing_table") == 4
+    assert [k for k, _ in preflight.problems(good, {"Tasks": ok["Tasks"]})].count("missing_table") == 5
 
 
 def test_scorecard_flags_only_big_weak_sources():
@@ -83,3 +83,15 @@ def test_scorecard_flags_only_big_weak_sources():
     rows = [{"Source": "a", "Status": "Excluded"}] * 25 + [{"Source": "a", "Status": "Needs review"}] * 2 + [{"Source": "b", "Status": "Excluded"}] * 5
     card = scorecard.score(rows)
     assert scorecard.weak(card) == ["a"] and card["b"]["rate"] == 0
+
+
+def test_dashboard_marks_stuck_stage():
+    import dashboard, tasks as T
+    from datetime import timedelta
+    old = T.stamp(T.now() - timedelta(hours=30))
+    out = dashboard.build([{"_id": "c1", "Company": "Acme", "Shortlist": True}], [],
+                          [{"_id": "p", "LinkedIn URL": "https://linkedin.com/in/a", "Company": ["c1"]}],
+                          [{"Type": "classify_post", "Status": "Open", "Created at": old}], [], [], [{"Run": "r1", "Keyword": "a", "Raw": 9, "New": 2}])
+    st = {f["step"]: f for f in out["funnel"]}
+    assert st[3]["state"] == "stuck" and st[1]["done"] == 9 and st[2]["done"] == 2 and st[8]["waiting"] == 1
+    assert out["accounts"][0]["next"] == "add emails"

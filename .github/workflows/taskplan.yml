@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       cmd:
-        description: "round | step | plan | plan-dry | stats | audit | cycle | daily-round-dry | daily-fetch-dry | daily-round | daily-fetch"
+        description: "round | step | plan | plan-dry | stats | audit | cycle | daily-round-dry | daily-fetch-dry | daily-round | daily-fetch | dashboard"
         default: "stats"
       args:
         description: "Optional: max tasks per type for plan (default 20)"
@@ -19,6 +19,8 @@ jobs:
       AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
       AIRTABLE_BASE_ID: appms9ERcB5Ws3r0w  # pinned: the AIRTABLE_BASE_ID secret still points at the OLD base
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
       CMD: ${{ inputs.cmd }}
       ARGS: ${{ inputs.args }}
     steps:
@@ -32,12 +34,14 @@ jobs:
           python tasks.py setup
           python emails.py setup
           python alerts.py setup
+          python runs.py setup
           python preflight.py
       - run: |
           case "$CMD" in
             round) python taskplan.py round --max "${ARGS:-10}" ;;
             step) python taskplan.py step --max "${ARGS:-10}" ;;
             plan) python taskplan.py plan --max "${ARGS:-20}" ;;
+            dashboard) python dashboard.py ;;
             daily-round-dry) DRY_RUN=1 bash daily.sh round ;;
             daily-fetch-dry) DRY_RUN=1 bash daily.sh fetch ;;
             daily-round) bash daily.sh round ;;
