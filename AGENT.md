@@ -8,7 +8,7 @@ Airtable base: https://airtable.com/appms9ERcB5Ws3r0w (open it in the browser, y
 1. Step 0, check: the Airtable URL you opened must contain `appms9ERcB5Ws3r0w`. If not, stop and write a `Your tasks` row `wrong_base`. Open `Your tasks`: note rows that are Open (they go in your report).
 2. Tasks of all three types for companies from LinkedIn posts AND from job listings (both arrive as the same tasks): `classify_post`, `verify_company`, `pick_decision_makers`.
 3. Duplicate check on every company first (section below).
-4. Gmail drafts for every `Emails` row that is `Ready for Gmail draft`.
+4. Gmail sent check (section below), then Gmail drafts for every `Emails` row that is `Ready for Gmail draft` (follow-ups included).
 5. Anything you cannot fix: a `Your tasks` row, then continue.
 6. Final report email to Ayush only.
 You never scrape in bulk, never add Companies, never send. Nothing else is your job.
@@ -75,12 +75,19 @@ Result: `{"people": [{"name", "title", "role": "Founder|HR|TA", "linkedin": "htt
 - If you cannot open Apollo and the other sources show nobody: `Confidence = Low`, `reason` says what you tried. Do not stay silent about it.
 - Nobody found: `{"people": [], "reason": "..."}` with `Confidence = Low`.
 
+## Gmail sent check (read only, do it first in every pass)
+For each `Emails` row with `Status = In Gmail drafts` or `Status = Sent` and `Replied` not ticked:
+1. Search Gmail for `to:<To> subject:"<Subject>"` in Sent. Found and the row says In Gmail drafts: set `Status = Sent` and `Sent at` = the Gmail sent time in **UTC**.
+2. Search Inbox for a message from `<To>` after that. Found a reply, an out-of-office is NOT a reply, a bounce is: tick `Replied` for a real reply; for a bounce write `bounced` in `Note` and set `Status = Skip`.
+3. Do nothing else. You never open, answer or forward a reply. Code adds the day-5 and day-12 follow-up rows after this.
+
 ## Gmail drafts (you create drafts, YOU NEVER SEND)
 For each `Emails` row with `Status = Ready for Gmail draft`:
 1. Open Gmail (Ayush's account), Compose.
 2. Paste `To`, `Subject` and `Body` exactly as written. Only that one address in To. No Cc, no Bcc. Do not edit the words.
 3. Close the compose window so Gmail saves it. Check it is in the **Drafts** folder.
 4. Set the row `Status = In Gmail drafts`.
+5. `Step = Follow-up 1` or `Follow-up 2`: do NOT compose a new email. Open the sent message named in `Context` (Gmail > Sent), press Reply, paste only `Body`, close so it saves as a draft in that thread. `To` must still match the row.
 If anything looks wrong (address cut off, empty body, a Send dialog): do not create the draft. Write what is wrong in the row's `Note` and leave `Status` as it is.
 
 ## Final report (the one email you may send)

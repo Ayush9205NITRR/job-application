@@ -126,7 +126,7 @@ def run_posts(items, log=print, only_new=False):
         jobs = keep
     if not jobs:
         return {"companies": 0, "jobs": 0, "new": 0, "posts": st}
-    return {**run_normalised(jobs, log), "posts": st}
+    return {**run_normalised(jobs, log, source="linkedin_posts"), "posts": st}
 
 
 def pick(item: dict, *keys, default=None):
@@ -200,10 +200,10 @@ def classify_new(companies: dict[str, list[dict]]) -> dict[str, dict]:
 
 def run(raw, log=print):
     """Dedupe scraped jobs by company, classify, upsert into Airtable. Returns {companies, jobs, new}."""
-    return run_normalised([normalise(r) for r in raw], log)
+    return run_normalised([normalise(r) for r in raw], log, source="linkedin_jobs")
 
 
-def run_normalised(jobs, log=print):
+def run_normalised(jobs, log=print, source=None):
     """Same, for job dicts that are already in normalise()'s shape (LinkedIn jobs and hiring posts share it)."""
     companies = rules.group_by_company(jobs)
     log(f"{len(companies)} unique companies ({len(jobs) - sum(map(len, companies.values()))} jobs dropped: no company URL / duplicate)")
@@ -221,6 +221,8 @@ def run_normalised(jobs, log=print):
         row = {"Company LinkedIn URL": url, "Company": j["company"], "Website": j["website"], "Last seen": today}
         if j["headcount"]:
             row["Headcount"] = str(j["headcount"])
+        if source and url not in existing:  # tag only the first source that found it
+            row["Source"] = source
         if url in decisions:
             row.update(decisions[url])
             row["About"] = (j["about"] or j["description"] or "")[:1000]

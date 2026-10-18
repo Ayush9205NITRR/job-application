@@ -26,6 +26,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests python-dotenv
+      - name: Setup and preflight
+        run: |
+          python tasks.py setup
+          python emails.py setup
+          python alerts.py setup
+          python preflight.py
       - run: |
           case "$CMD" in
             round) python taskplan.py round --max "${ARGS:-10}" ;;

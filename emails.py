@@ -26,6 +26,8 @@ FIELDS = [
     {"name": "Step", "type": "singleSelect", "options": {"choices": [{"name": s} for s in ("Email 1", "Follow-up 1", "Follow-up 2")]}},
     {"name": "Status", "type": "singleSelect", "options": {"choices": [{"name": s} for s in STATES]}},
     {"name": "Note", "type": "multilineText"},
+    {"name": "Sent at", "type": "dateTime", "options": {"dateFormat": {"name": "iso"}, "timeFormat": {"name": "24hour"}, "timeZone": "utc"}},
+    {"name": "Replied", "type": "checkbox", "options": {"icon": "check", "color": "greenBright"}},
 ]
 Emails = at.Table("Emails")
 
@@ -99,6 +101,12 @@ def setup():
     if "Emails" not in tables:
         request("POST", meta, headers=_headers(), json={"name": "Emails", "fields": FIELDS})
         print("created Emails table")
+    else:  # additive: columns added after the first version
+        have_e = {f["name"] for f in tables["Emails"]["fields"]}
+        for f in FIELDS:
+            if f["name"] not in have_e:
+                request("POST", f"{meta}/{tables['Emails']['id']}/fields", headers=_headers(), json=f)
+                print("added Emails." + f["name"])
     have = {f["name"] for f in tables["Companies"]["fields"]}
     if "Shortlist" not in have:
         request("POST", f"{meta}/{tables['Companies']['id']}/fields", headers=_headers(),

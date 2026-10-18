@@ -344,6 +344,18 @@ def reopen(names, tasks=None):
     return n
 
 
+CONTACT_FIELDS = [
+    {"name": "Email", "type": "singleLineText"}, {"name": "First name", "type": "singleLineText"},
+    {"name": "Last name", "type": "singleLineText"}, {"name": "Title", "type": "singleLineText"},
+    {"name": "LinkedIn URL", "type": "url"},
+    {"name": "Contact type", "type": "singleSelect", "options": {"choices": [{"name": r} for r in (*ROLES, "Job poster")]}},
+    {"name": "Stage", "type": "singleSelect", "options": {"choices": [{"name": s} for s in ("New", "Drafted", "Approved", "Sent", "Replied", "Do not contact")]}},
+    {"name": "Email status", "type": "singleSelect", "options": {"choices": [{"name": s} for s in EMAIL_STATUS]}},
+]
+COMPANY_FIELDS = [{"name": n, "type": "singleLineText"} for n in
+                  ("Funding stage", "Total funding", "Annual revenue (Apollo)", "Employees (Apollo)", "Apollo match", "Source")]
+
+
 def setup():
     """Additive: creates Tasks and Contacts if missing, adds missing fields to Tasks. Never edits existing fields."""
     meta = f"https://api.airtable.com/v0/meta/bases/{base_id()}/tables"

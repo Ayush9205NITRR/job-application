@@ -23,6 +23,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests python-dotenv
+      - name: Setup and preflight
+        run: |
+          python tasks.py setup
+          python emails.py setup
+          python alerts.py setup
+          python preflight.py
       - run: python posts_push.py --per "$PER"
       - name: Your tasks (fails the run if you have something to do, so GitHub emails you)
         if: always()

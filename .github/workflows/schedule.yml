@@ -1,0 +1,56 @@
+name: Daily schedule
+
+# Runs on a timer ONLY when this file is on the default branch. Times are UTC (IST = UTC + 5:30).
+#   02:30 every 3rd day  = 08:00 IST   fetch new companies (Apify, about 0.50 USD)
+#   hourly 03:00-08:00   = 08:30-13:30 IST   make tasks, apply the agent's answers, build Emails rows, follow-ups
+# The agent is started by Ayush at 09:00 IST and 14:00 IST (see RUNBOOK.md). Every run ends with a Your tasks check:
+# if you owe something the run fails, and GitHub emails you.
+on:
+  schedule:
+    - cron: "30 2 */3 * *"
+    - cron: "0 3-8 * * *"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "fetch | round"
+        default: "round"
+
+concurrency: outbound-schedule
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      AIRTABLE_BASE_ID: appms9ERcB5Ws3r0w  # pinned: the secret may still point at the OLD base
+      JOB: ${{ github.event_name == 'schedule' && (github.event.schedule == '30 2 */3 * *' && 'fetch' || 'round') || inputs.job }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - name: Setup (additive) and preflight
+        run: |
+          python tasks.py setup
+          python emails.py setup
+          python alerts.py setup
+          python preflight.py
+      - name: Fetch new companies
+        if: env.JOB == 'fetch'
+        run: python posts_push.py --per 50
+      - name: Make tasks, apply answers, build emails, follow-ups
+        if: always() && env.JOB != ''
+        run: |
+          python taskplan.py round --max 10
+          python followups.py
+      - name: Report
+        if: always()
+        run: |
+          python scorecard.py || true
+          python report.py
+      - name: Your tasks (fails the run if you owe something, so GitHub emails you)
+        if: always()
+        run: python alerts.py check

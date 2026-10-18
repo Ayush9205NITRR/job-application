@@ -238,3 +238,7 @@ def test_agent_emails_are_ignored_by_default():
     ok = {"people": [{"name": "Asha Rao", "role": "Founder", "linkedin": "https://www.linkedin.com/in/asha", "email": "asha@acme.io"}], "reason": "saw it on the company site and page"}
     _, _, _, cons = run(done("pick_decision_makers", ok))
     assert "Email" not in cons[0] and cons[0]["LinkedIn URL"].endswith("/in/asha")
+
+
+def test_setup_field_lists_exist():
+    assert {f["name"] for f in tasks.COMPANY_FIELDS} >= {"Funding stage", "Source"} and tasks.CONTACT_FIELDS[0]["name"] == "Email"

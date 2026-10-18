@@ -48,3 +48,38 @@ def test_taskplan_round_calls_build_with_a_real_argument_name():
     src = open("taskplan.py").read()
     kw = re.search(r"emails\.build\((\w+)=", src).group(1)
     assert kw in inspect.signature(emails.build).parameters
+
+
+# ---- follow-ups ------------------------------------------------------------------------------
+def test_followups_wait_for_days_and_stop_on_reply():
+    from datetime import datetime, timedelta, timezone
+    import followups
+    now = datetime(2026, 10, 20, tzinfo=timezone.utc)
+    sent = lambda d: (now - timedelta(days=d)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    base = {"To": "a@x.io", "First name": "A", "Company": "X", "Subject": "Hi", "Contact record": "c1"}
+    one = lambda d, **k: [dict(base, Step="Email 1", Status="Sent", **{"Sent at": sent(d)}, **k)]
+    assert followups.due(one(3), now) == []
+    assert [s for _, s in followups.due(one(5), now)] == ["Follow-up 1"]
+    assert followups.due(one(6, Replied=True), now) == []
+    both = one(13) + [dict(base, Step="Follow-up 1", Status="Sent")]
+    assert [s for _, s in followups.due(both, now)] == ["Follow-up 2"]
+    assert followups.due(one(13) + [dict(base, Step="Follow-up 1", Status="In Gmail drafts")], now) == []
+
+
+def test_preflight_names_each_known_mistake():
+    import preflight
+    ok = {t: list(c) for t, c in preflight.NEED_COLUMNS.items()}
+    good = {"AIRTABLE_TOKEN": "x", "AIRTABLE_BASE_ID": "appms9ERcB5Ws3r0w"}
+    assert preflight.problems(good, ok) == []
+    assert [k for k, _ in preflight.problems(dict(good, AIRTABLE_BASE_ID="app40Dtij4xm0M2aW"), ok)] == ["wrong_base"]
+    assert [k for k, _ in preflight.problems({}, None)] == ["missing_secret", "missing_secret"]
+    short = dict(ok, Companies=["Status"])
+    assert {k for k, _ in preflight.problems(good, short)} == {"missing_column"}
+    assert [k for k, _ in preflight.problems(good, {"Tasks": ok["Tasks"]})].count("missing_table") == 4
+
+
+def test_scorecard_flags_only_big_weak_sources():
+    import scorecard
+    rows = [{"Source": "a", "Status": "Excluded"}] * 25 + [{"Source": "a", "Status": "Needs review"}] * 2 + [{"Source": "b", "Status": "Excluded"}] * 5
+    card = scorecard.score(rows)
+    assert scorecard.weak(card) == ["a"] and card["b"]["rate"] == 0
