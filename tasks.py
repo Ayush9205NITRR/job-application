@@ -174,6 +174,10 @@ def apply_done(tasks=None, tables=None):
             r = json.loads(t.get("Result") or "")
             if not isinstance(r, dict):
                 raise ValueError("Result must be a JSON object")
+            if r.get("duplicate") is True and len(str(r.get("reason") or "").strip()) >= 15:  # agent found it already listed
+                tasks.update([(t["_id"], {"Status": "Applied", "Note": "duplicate, skipped"})])
+                out["Applied"] += 1
+                continue
             bad = CHECKS[kind](r)
         except (ValueError, KeyError) as e:
             bad = f"unreadable result: {e}"

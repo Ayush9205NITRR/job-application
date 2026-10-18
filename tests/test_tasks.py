@@ -226,3 +226,8 @@ def test_alert_scan_opens_and_self_closes():
     emails.rows[0]["Status"] = "Sent"
     alerts.scan(old, emails, table)
     assert {r["Key"]: r["Status"] for r in table.rows} == {"agent_waiting": "Open", "drafts_waiting": "Done"}
+
+
+def test_duplicate_answer_is_closed_without_applying():
+    t = Fake([done("pick_decision_makers", {"duplicate": True, "reason": "already listed: Acme (rec1)"}, conf="Low")])
+    assert tasks.apply_done(t, {})["Applied"] == 1 and t.rows[0]["Note"] == "duplicate, skipped"
