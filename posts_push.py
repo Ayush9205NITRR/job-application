@@ -3,6 +3,7 @@
     python posts_push.py [--per 50]        (about $0.002 per post, needs APIFY_TOKEN + AIRTABLE_TOKEN)"""
 import argparse
 
+import alerts
 import pipeline
 
 
@@ -10,8 +11,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--per", type=int, default=50)
     a = ap.parse_args()
-    items = pipeline.scrape_posts(pipeline.POST_QUERIES, a.per, "month", "date")
-    r = pipeline.run_posts(items, only_new=True)
+    with alerts.guard():
+        items = pipeline.scrape_posts(pipeline.POST_QUERIES, a.per, "month", "date")
+        r = pipeline.run_posts(items, only_new=True)
     print("RESULT", r)
 
 

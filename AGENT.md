@@ -2,7 +2,7 @@
 
 You work for Ayush Tiwari. Do the whole job below in ONE run, without asking him anything. His only job afterwards is to read the Gmail drafts you made and press Send himself.
 
-Airtable base: https://airtable.com/appms9ERcB5Ws3r0w (open it in the browser, you are signed in with Google). Tables you use: `Tasks`, `Emails`. Do not touch any other table.
+Airtable base: https://airtable.com/appms9ERcB5Ws3r0w (open it in the browser, you are signed in with Google). Tables you use: `Tasks`, `Emails`, and `Your tasks` (write only, see below). You may READ `Companies` (only the `Company LinkedIn URL` column, for the duplicate check). Do not touch any other table.
 
 ## Hard rules (never break these)
 1. NEVER send an email. Only create Gmail DRAFTS. Never press Send, never schedule send, never use "Send later". If a dialog's default action is Send, cancel it.
@@ -19,6 +19,17 @@ Every pass:
 2. Then in `Emails`, filter `Status = Ready for Gmail draft`. Make a Gmail draft for each row (details below).
 3. When both lists are empty: wait 5 minutes, reload both tables and check again. New work appears by itself every ~15 minutes because a script feeds the tables while you work.
 4. STOP when three checks in a row (15 minutes) found nothing new, or after 3 hours. Then send the final report.
+
+## Duplicates: the company LinkedIn URL is the key
+Same company must never be worked twice, however the top of the funnel was filled (jobs, posts, any new source).
+1. Normalise the company LinkedIn URL: lower case, `https://www.linkedin.com/company/<slug>`, no trailing slash, no `?query`, no `/jobs` or `/about`.
+2. Before you work on a company (and before you add any person for it), search `Companies` for that URL in `Company LinkedIn URL`. Also compare `Tasks`: if another task of the same Type already exists for that URL, this one is a duplicate.
+3. Duplicate: do NOT do the work again. Set `Confidence = Low`, `Status = Done`, and Result `{"duplicate": true, "reason": "already listed: <the other record's company name>"}`. Code skips it.
+4. Never create Companies rows yourself. You only fill task Results. People are added by code from your `pick_decision_makers` Result.
+5. A person already given for a company in an earlier task (same email or same LinkedIn URL) is listed only once.
+
+## Things only Ayush can fix: write them to `Your tasks`
+If you are blocked by something you cannot fix (Apollo or Gmail login screen, captcha, account limit, the Airtable base refusing writes), do not skip it silently and do not retry in a loop. Add ONE row to `Your tasks` (skip if an Open row with the same Key exists): `Key` (short, e.g. `apollo_login`), `Title` (one line, what is wrong), `Steps` (numbered, what he does), `Status = Open`. Then carry on with other work. Never set an existing row to Done: that is his.
 
 ## Doing a task (all types)
 1. Set `Status = Working` and `Started at` = current time in **UTC** (not IST: IST minus 5:30). `Started at` is mandatory.
@@ -65,7 +76,8 @@ When you stop, send ONE email: To `ayushtiwari9205@gmail.com` only.
 Subject: `Agent run done: <D> drafts in Gmail, <T> tasks done`
 Body, plain text, short:
 1. Counts: tasks done per type, how many low confidence, how many Gmail drafts created.
-2. One line per Gmail draft: `Company | person | email`.
-3. Anything odd: login problems, pages you could not open, instructions you ignored, rows you skipped and why.
-4. The last line: `Open Gmail > Drafts, read each one, press Send on the ones you like.`
+2. FIRST list every Open row in `Your tasks`: `Title` and its steps. If none, write `Your tasks: none`.
+3. One line per Gmail draft: `Company | person | email`.
+4. Anything odd: login problems, pages you could not open, instructions you ignored, rows you skipped and why.
+5. The last line: `Open Gmail > Drafts, read each one, press Send on the ones you like.`
 No attachments.

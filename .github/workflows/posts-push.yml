@@ -24,3 +24,8 @@ jobs:
           python-version: "3.12"
       - run: pip install requests python-dotenv
       - run: python posts_push.py --per "$PER"
+      - name: Your tasks (fails the run if you have something to do, so GitHub emails you)
+        if: always()
+        run: |
+          python alerts.py setup
+          python alerts.py check

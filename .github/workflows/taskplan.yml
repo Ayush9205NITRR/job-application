@@ -34,3 +34,8 @@ jobs:
             plan-dry) python taskplan.py plan --dry --max "${ARGS:-20}" ;;
             *) python taskplan.py "$CMD" ;;
           esac
+      - name: Your tasks (fails the run if you have something to do, so GitHub emails you)
+        if: always()
+        run: |
+          python alerts.py setup
+          python alerts.py check

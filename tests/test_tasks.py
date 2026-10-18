@@ -194,3 +194,35 @@ def test_reopen_can_target_one_status():
               {"_id": "t3", "Company": "C", "Type": "classify_post", "Status": "Failed"}])
     assert tasks.reopen(["@pick_decision_makers@Failed"], t) == 1
     assert [r["Status"] for r in t.rows] == ["Open", "Applied", "Failed"]
+
+
+# ---- alerts: only-you tasks -------------------------------------------------------------------
+def test_alerts_classify_known_walls_only():
+    import alerts
+    assert alerts.classify_error("POST https://api.apify.com/v2/acts/x -> 402: not-enough-usage")[0] == "apify_token"
+    assert alerts.classify_error("POST https://api.airtable.com/v0/app/Jobs -> 422: PUBLIC_API_BILLING_LIMIT_EXCEEDED")[0] == "airtable_full"
+    assert alerts.classify_error("POST https://api.airtable.com/v0/app/Jobs -> 422: INVALID_VALUE") is None
+    assert alerts.classify_error("ValueError: oops") is None
+
+
+def test_alert_guard_writes_one_row_and_reraises():
+    import alerts
+    t = Fake()
+    for _ in range(2):
+        try:
+            with alerts.guard(t):
+                raise RuntimeError("POST https://api.apify.com/v2/acts/x -> 402: usage limit")
+        except RuntimeError:
+            pass
+    assert [r["Key"] for r in t.rows] == ["apify_token"] and t.rows[0]["Status"] == "Open"
+
+
+def test_alert_scan_opens_and_self_closes():
+    import alerts
+    from datetime import timedelta
+    old = Fake([{"_id": "t", "Status": "Open", "Created at": tasks.stamp(tasks.now() - timedelta(hours=3))}])
+    table, emails = Fake(), Fake([{"_id": "e", "Status": "In Gmail drafts"}])
+    assert alerts.scan(old, emails, table) == ["agent_waiting", "drafts_waiting"]
+    emails.rows[0]["Status"] = "Sent"
+    alerts.scan(old, emails, table)
+    assert {r["Key"]: r["Status"] for r in table.rows} == {"agent_waiting": "Open", "drafts_waiting": "Done"}

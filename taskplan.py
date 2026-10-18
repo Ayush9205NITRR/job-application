@@ -136,4 +136,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import alerts
+
+    with alerts.guard():
+        main()
