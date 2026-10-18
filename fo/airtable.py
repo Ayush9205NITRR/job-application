@@ -6,7 +6,9 @@ from urllib.parse import quote
 from .config import env
 from .http import request
 
-DRY_RUN = False
+import os
+
+DRY_RUN = os.environ.get("DRY_RUN") == "1"  # a dry run reads Airtable but writes nothing
 _API = "https://api.airtable.com/v0"
 
 

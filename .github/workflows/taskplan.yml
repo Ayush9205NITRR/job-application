@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       cmd:
-        description: "round | step | plan | plan-dry | stats | audit | cycle"
+        description: "round | step | plan | plan-dry | stats | audit | cycle | daily-round-dry | daily-fetch-dry | daily-round | daily-fetch"
         default: "stats"
       args:
         description: "Optional: max tasks per type for plan (default 20)"
@@ -18,6 +18,7 @@ jobs:
     env:
       AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
       AIRTABLE_BASE_ID: appms9ERcB5Ws3r0w  # pinned: the AIRTABLE_BASE_ID secret still points at the OLD base
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
       CMD: ${{ inputs.cmd }}
       ARGS: ${{ inputs.args }}
     steps:
@@ -37,6 +38,10 @@ jobs:
             round) python taskplan.py round --max "${ARGS:-10}" ;;
             step) python taskplan.py step --max "${ARGS:-10}" ;;
             plan) python taskplan.py plan --max "${ARGS:-20}" ;;
+            daily-round-dry) DRY_RUN=1 bash daily.sh round ;;
+            daily-fetch-dry) DRY_RUN=1 bash daily.sh fetch ;;
+            daily-round) bash daily.sh round ;;
+            daily-fetch) bash daily.sh fetch ;;
             plan-dry) python taskplan.py plan --dry --max "${ARGS:-20}" ;;
             *) python taskplan.py "$CMD" ;;
           esac

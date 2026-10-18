@@ -14,6 +14,10 @@ on:
       job:
         description: "fetch | round"
         default: "round"
+      dry:
+        description: "Dry run: read only, writes nothing, spends nothing"
+        type: boolean
+        default: true
 
 concurrency: outbound-schedule
 
@@ -25,6 +29,7 @@ jobs:
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
       AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
       AIRTABLE_BASE_ID: appms9ERcB5Ws3r0w  # pinned: the secret may still point at the OLD base
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry && '1' || '' }}
       JOB: ${{ github.event_name == 'schedule' && (github.event.schedule == '30 2 */3 * *' && 'fetch' || 'round') || inputs.job }}
     steps:
       - uses: actions/checkout@v4
@@ -32,25 +37,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests python-dotenv
-      - name: Setup (additive) and preflight
-        run: |
-          python tasks.py setup
-          python emails.py setup
-          python alerts.py setup
-          python preflight.py
-      - name: Fetch new companies
-        if: env.JOB == 'fetch'
-        run: python posts_push.py --per 50
-      - name: Make tasks, apply answers, build emails, follow-ups
-        if: always() && env.JOB != ''
-        run: |
-          python taskplan.py round --max 10
-          python followups.py
-      - name: Report
-        if: always()
-        run: |
-          python scorecard.py || true
-          python report.py
-      - name: Your tasks (fails the run if you owe something, so GitHub emails you)
-        if: always()
-        run: python alerts.py check
+      - name: Daily work
+        run: bash daily.sh "$JOB"

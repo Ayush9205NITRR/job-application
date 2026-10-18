@@ -15,10 +15,10 @@ NEED_COLUMNS = {"Companies": ("Company LinkedIn URL", "Status", "Source", "Fundi
                 "Emails": ("To", "Status", "Step"), "Contacts": ("Email", "Email status", "LinkedIn URL"), "Your tasks": ("Key", "Status")}
 
 
-def problems(env=None, tables=None, expected=EXPECTED_BASE):
+def problems(env=None, tables=None, expected=EXPECTED_BASE, need=NEED_ENV):
     """Pure: -> list of (key, message). `tables` is {name: [column names]} or None when it could not be read."""
     env = os.environ if env is None else env
-    out = [("missing_secret", f"missing environment value {n}") for n in NEED_ENV if not env.get(n)]
+    out = [("missing_secret", f"missing {n}: add it in GitHub > Settings > Secrets > Actions") for n in need if not env.get(n)]
     base = env.get("AIRTABLE_BASE_ID", "")
     if base and expected not in base:
         out.append(("wrong_base", f"AIRTABLE_BASE_ID points at another base than {expected}"))
@@ -37,12 +37,13 @@ def read_tables():
 
 
 def main():
-    bad = problems()
+    need = NEED_ENV + ("APIFY_TOKEN",) if "--apify" in sys.argv else NEED_ENV
+    bad = problems(need=need)
     tables = None
     if not [k for k, _ in bad if k in ("wrong_base", "missing_secret")]:
         try:
             tables = read_tables()
-            bad = problems(tables=tables)
+            bad = problems(tables=tables, need=need)
         except RuntimeError as e:
             bad.append(("airtable_unreachable", str(e)[:200]))
     for key, msg in bad:

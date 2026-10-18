@@ -2,7 +2,7 @@
     python alerts.py setup    create the table (additive)
     python alerts.py scan     add rows for waiting agent / drafts, close the ones that cleared itself
     python alerts.py list     print open rows
-    python alerts.py check    list, and exit 1 if any are open (a failed GitHub run emails you)
+    python alerts.py check    list, and exit 1 only if a real wall is open (token, limit, wrong setup): GitHub then emails you
 Rows closed by you: set Status = Done in Airtable."""
 import re
 import sys
@@ -95,6 +95,13 @@ def scan(tasks=None, emails=None, table=None, now_=None):
     return sorted(want)
 
 
+INFO = ("agent_waiting", "drafts_waiting")  # things to do, but not a broken run: shown, never fail the workflow
+
+
+def blocking(rows):
+    return [r for r in rows if r.get("Key") not in INFO]
+
+
 def open_rows(table=None):
     return [r for r in (table or Table).all() if r.get("Status") != "Done"]
 
@@ -125,6 +132,7 @@ if __name__ == "__main__":
         show()
     elif cmd == "check":
         scan()
-        sys.exit(1 if show() else 0)
+        rows = show()
+        sys.exit(1 if blocking(rows) else 0)  # only a real wall (token, limit, wrong setup) turns the run red
     else:
         print(__doc__)
