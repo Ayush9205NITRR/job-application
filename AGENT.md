@@ -95,8 +95,8 @@ If anything looks wrong (address cut off, empty body, a Send dialog): do not cre
 When you stop, send ONE email: To `ayushtiwari9205@gmail.com` only.
 Subject: `Agent run done: <D> drafts in Gmail, <T> tasks done`
 Body, plain text, short:
-1. Counts: tasks done per type, how many low confidence, how many Gmail drafts created.
-2. FIRST list every Open row in `Your tasks`: `Title` and its steps. If none, write `Your tasks: none`.
+1. Every Open row in `Your tasks` (apply now, find emails, blockers): `Title` and its steps. If none, write `Your tasks: none`.
+2. Counts: tasks done per type, how many low confidence, how many Gmail drafts created.
 3. One line per Gmail draft: `Company | person | email`.
 4. Anything odd: login problems, pages you could not open, instructions you ignored, rows you skipped and why.
 5. The last line: `Open Gmail > Drafts, read each one, press Send on the ones you like.`
