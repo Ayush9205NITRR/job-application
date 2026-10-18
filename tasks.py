@@ -20,6 +20,7 @@ STATUSES = ("Open", "Working", "Done", "Applied", "Failed", "Needs human")
 ROLES = ("Founder", "HR", "TA")
 STALE = timedelta(minutes=30)
 MAX_TRIES = 2
+AGENT_EMAILS = False
 
 FIELDS = [
     {"name": "Task ID", "type": "singleLineText"},
@@ -133,7 +134,7 @@ def apply_pick_decision_makers(task, r, tables):
                "Company": [task["Company record"]]}
         if p.get("linkedin"):
             row["LinkedIn URL"] = p["linkedin"]
-        if p.get("email"):
+        if p.get("email") and AGENT_EMAILS:  # off by default: Apollo credits are not spent on emails; Ayush adds them himself
             row["Email"] = p["email"].strip().lower()
             row["Email status"] = p.get("email_status") or "unknown"
         rows.append(row)

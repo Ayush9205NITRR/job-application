@@ -161,7 +161,8 @@ def test_verify_writes_company_facts_so_icp_can_run():
     assert c["Funding stage"] == "Seed" and c["Employees (Apollo)"] == "12" and c["Total funding"] == "$2M" and c["Apollo match"] == "agent"
 
 
-def test_decision_maker_email_is_checked_and_saved():
+def test_decision_maker_email_is_checked_and_saved(monkeypatch):
+    monkeypatch.setattr(tasks, "AGENT_EMAILS", True)
     ok = {"people": [{"name": "Asha Rao", "role": "Founder", "email": "Asha@Acme.io", "email_status": "verified"}], "reason": "saw it on the company site and page"}
     _, _, _, cons = run(done("pick_decision_makers", ok))
     assert cons[0]["Email"] == "asha@acme.io" and cons[0]["Email status"] == "verified"
@@ -231,3 +232,9 @@ def test_alert_scan_opens_and_self_closes():
 def test_duplicate_answer_is_closed_without_applying():
     t = Fake([done("pick_decision_makers", {"duplicate": True, "reason": "already listed: Acme (rec1)"}, conf="Low")])
     assert tasks.apply_done(t, {})["Applied"] == 1 and t.rows[0]["Note"] == "duplicate, skipped"
+
+
+def test_agent_emails_are_ignored_by_default():
+    ok = {"people": [{"name": "Asha Rao", "role": "Founder", "linkedin": "https://www.linkedin.com/in/asha", "email": "asha@acme.io"}], "reason": "saw it on the company site and page"}
+    _, _, _, cons = run(done("pick_decision_makers", ok))
+    assert "Email" not in cons[0] and cons[0]["LinkedIn URL"].endswith("/in/asha")
