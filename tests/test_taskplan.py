@@ -68,3 +68,10 @@ def test_stats_accuracy():
             {"Type": "classify_post", "Status": "Needs human", "Confidence": "Low"}]
     s = taskplan.stats(Fake(rows))
     assert s["audit_accuracy_pct"] == 50 and s["low_confidence_pct"] == 33 and s["needs_human"] == 1
+
+
+def test_relaxed_icp_takes_series_a_but_not_series_b():
+    import companies
+    ok = lambda stage: companies.icp_check({"stage": stage, "employees_n": 40}, companies.RELAXED_ICP)[0]
+    assert ok("Series A") and ok("Series-A") and ok("series a") and ok("Seed")
+    assert not ok("Series B") and not ok("Series C")

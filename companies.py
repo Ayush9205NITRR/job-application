@@ -44,8 +44,8 @@ def employees(s):
 DEFAULT_ICP = {"stages": None, "emp_min": 2, "emp_max": 50, "rev_max": None, "funding_max": None, "unknown_ok": False}
 
 
-# Wider net for the one-click run: early-stage companies of any naming (Seed, Pre-Series A, bootstrapped) up to 100 people.
-RELAXED_ICP = {"stages": ["Seed", "Pre-Seed", "Pre-seed", "Angel", "Pre-Series A", "Bootstrapped"], "emp_min": 1, "emp_max": 100,
+# Wider net for the one-click run: early-stage companies of any naming (Seed, Pre-Series A, Series A, bootstrapped) up to 100 people.
+RELAXED_ICP = {"stages": ["Seed", "Pre-Seed", "Pre-seed", "Angel", "Pre-Series A", "Series A", "Bootstrapped"], "emp_min": 1, "emp_max": 100,
                "rev_max": None, "funding_max": None, "unknown_ok": False}
 
 
@@ -56,7 +56,8 @@ def icp_check(c, f=None):
     if c.get("excluded"):
         return False, "hard-excluded (staffing, events, assistant role)"
     stage, emp = c.get("stage") or "", c.get("employees_n")
-    ok = (stage in f["stages"]) if f["stages"] else bool(SEED.search(stage))
+    norm = lambda s: re.sub(r"[\s_-]+", " ", s).strip().lower()  # "Series-A", "series a" and "Series A" are one stage
+    ok = (norm(stage) in {norm(s) for s in f["stages"]}) if f["stages"] else bool(SEED.search(stage))
     note = stage.lower() if ok else ""
     if not ok and not stage and f["unknown_ok"] and emp is not None:
         ok, note = True, "no funding data, included"
