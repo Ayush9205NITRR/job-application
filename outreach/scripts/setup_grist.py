@@ -65,10 +65,6 @@ FOUNDERS = [
     col("Mails_Sent", "Int"), col("Last_Sent", "Date"),
     col("Sent_1", "Date"), col("Sent_2", "Date"),
     col("Sent2_Due", "Date", F.F_SENT2_DUE),
-    # tracking (filled by sync_views.py)
-    col("Track_ID"),
-    col("Views_Count", "Int"), col("Last_Open", "DateTime:Asia/Kolkata"),
-    col("Resume_Clicks", "Int"), col("Last_Click", "DateTime:Asia/Kolkata"),
     # manual channels
     col("WA_Sent", "Bool"), col("WA2_Sent", "Bool"), col("LI_Sent", "Bool"),
     col("Reply", "Choice", choices=["None", "Replied", "Bounced", "Unsubscribed"]),

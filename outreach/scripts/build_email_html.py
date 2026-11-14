@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Build the HTML for one email (draft body) from a Founders row, adding the tracked resume link / optional pixel.
+"""Build the HTML for one email (draft body) from a Founders row.
 
   python3 scripts/build_email_html.py <founder_row_id> [--which 1|2] > out/draft.html
-  python3 scripts/build_email_html.py --text "Hi **Ayush**\n- a\n- b" --track-id abc123     # for testing
+  python3 scripts/build_email_html.py --text "Hi **Ayush**\n- a\n- b"          # for testing
 
-Email_Body conventions (what Run B writes):
-  **bold** -> <b>; lines starting with "- " -> bullet list; blank line -> paragraph; {{RESUME_LINK}} -> tracked link.
-Env (.env): TRACK_BASE, RESUME_URL (fallback when TRACK_BASE unset), PIXEL_ENABLED=true|false (default false).
+Email_Body conventions (what /run-b writes):
+  **bold** -> <b>; lines starting with "- " -> bullet list; blank line -> paragraph;
+  {{RESUME_LINK}} -> link to RESUME_URL from .env (or "(CV attached)" if unset).
 """
 import argparse
 import html
@@ -16,24 +16,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import grist_client as G  # noqa: E402,F401  (loads .env)
-
-
-def md_to_html(text, resume_link, pixel):
-    text = (text or "").replace("\r\n", "\n")
-    blocks = re.split(r"\n\s*\n", text.strip())
-    out = []
-    for b in blocks:
-        lines = b.split("\n")
-        if all(l.strip().startswith("- ") for l in lines if l.strip()):
-            items = "".join(f"<li>{inline(l.strip()[2:], resume_link)}</li>" for l in lines if l.strip())
-            out.append(f"<ul>{items}</ul>")
-        else:
-            out.append("<p>" + "<br>".join(inline(l, resume_link) for l in lines) + "</p>")
-    body = "\n".join(out)
-    if pixel:
-        body += f'\n<img src="{pixel}" width="1" height="1" alt="" style="display:none">'
-    return f'<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5">{body}</div>'
+import grist_client as G  # noqa: E402  (also loads .env)
 
 
 def inline(s, resume_link):
@@ -43,11 +26,17 @@ def inline(s, resume_link):
     return s
 
 
-def links(track_id):
-    base = os.environ.get("TRACK_BASE", "").rstrip("/")
-    resume = (f"{base}/r/{track_id}" if base and track_id else os.environ.get("RESUME_URL", ""))
-    pixel = (f"{base}/p/{track_id}.gif" if base and track_id and os.environ.get("PIXEL_ENABLED", "false").lower() == "true" else "")
-    return resume, pixel
+def md_to_html(text, resume_link=""):
+    text = (text or "").replace("\r\n", "\n")
+    out = []
+    for b in re.split(r"\n\s*\n", text.strip()):
+        lines = [l for l in b.split("\n") if l.strip()]
+        if lines and all(l.strip().startswith("- ") for l in lines):
+            items = "".join(f"<li>{inline(l.strip()[2:], resume_link)}</li>" for l in lines)
+            out.append(f"<ul>{items}</ul>")
+        else:
+            out.append("<p>" + "<br>".join(inline(l, resume_link) for l in lines) + "</p>")
+    return '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5">' + "\n".join(out) + "</div>"
 
 
 def main():
@@ -55,21 +44,16 @@ def main():
     ap.add_argument("row", nargs="?")
     ap.add_argument("--which", default="1")
     ap.add_argument("--text")
-    ap.add_argument("--track-id")
     a = ap.parse_args()
+    resume = os.environ.get("RESUME_URL", "")
     if a.text is not None:
-        resume, pixel = links(a.track_id)
-        print(md_to_html(a.text.replace("\\n", "\n"), resume, pixel))
+        print(md_to_html(a.text.replace("\\n", "\n"), resume))
         return
     rows = [r for r in G.fetch("Founders") if str(r["id"]) == str(a.row)]
     if not rows:
         sys.exit("row not found")
     f = rows[0]["fields"]
-    if not f.get("Track_ID"):
-        sys.exit("Track_ID missing: set it first (grist_client.new_track_id())")
-    resume, pixel = links(f["Track_ID"])
-    body = f.get("Email_Body") if a.which == "1" else f.get("Email2_Body")
-    print(md_to_html(body, resume, pixel))
+    print(md_to_html(f.get("Email_Body") if a.which == "1" else f.get("Email2_Body"), resume))
 
 
 if __name__ == "__main__":

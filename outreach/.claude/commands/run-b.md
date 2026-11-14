@@ -14,10 +14,10 @@ For each founder (Company row gives Company, Vertical, Stage, Job_Link, Role_Tar
 3. PERSONALITY LINE: ONE light human line (a touch of humour) built on a TRUE fact about me or their product. No jokes about them, no puns, no forced cleverness, nothing egoistic. If it feels forced, drop it.
 4. WRITE using my Templates rows as the skeleton: fill {{first_name}}, {{company}}, {{hook}}, {{proof}}, {{role}}; don't rewrite my template wording beyond that. If a template row is empty fall back to: hook -> why me in 3-5 bullets with numbers -> what I'm looking for -> one easy ask.
    - With Job_Link: name the role and reference the posting. Without: say I'm looking for a Founder's Office / Strategy & Ops / Growth role and ask if one is open.
-   - Email 1 -> `Email_Subject` + `Email_Body`: max 120 words, **bold** the 3-4 strongest numbers (markdown `**`), bullets as lines starting "- ", and put `{{RESUME_LINK}}` where the CV is mentioned (build_email_html.py turns it into the tracked link).
+   - Email 1 -> `Email_Subject` + `Email_Body`: max 120 words, **bold** the 3-4 strongest numbers (markdown `**`), bullets as lines starting "- ", and put `{{RESUME_LINK}}` where the CV is mentioned (build_email_html.py turns it into my RESUME_URL link).
    - Email 2 -> `Email2_Body` (max 60 words, one new proof or angle, same ask). WhatsApp 1 -> `WA_Msg` (max 60 words, one proof). WhatsApp 2 -> `WA2_Msg` (max 40). LinkedIn -> `LI_Note` (max 200 chars).
    - Founders at the same company must NOT get identical text: vary hook and proof.
 5. Honesty: only resume_facts.md numbers; mark anything unverified in `Check_Before_Sending`.
-6. WRITE BACK: Track_ID = `python3 -c "import sys;sys.path.insert(0,'scripts');import grist_client as g;print(g.new_track_id())"` (only if empty), Planned_Send (next Tue/Wed/Thu 09:30-11:00 IST, 20+ min apart; founders of the same company 1-2 days apart; max 25/day overall; unix seconds), Status = "Ready". Never set Approve (that's mine).
+6. WRITE BACK: Planned_Send (next Tue/Wed/Thu 09:30-11:00 IST, 20+ min apart; founders of the same company 1-2 days apart; max 25/day overall; unix seconds), Status = "Ready". Never set Approve (that's mine).
 
 End with a table: founder, company, hook (1 line), anything flagged.

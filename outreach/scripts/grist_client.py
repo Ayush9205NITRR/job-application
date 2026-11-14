@@ -18,7 +18,6 @@ import datetime
 import json
 import os
 import pathlib
-import secrets
 import sys
 import urllib.error
 import urllib.parse
@@ -98,10 +97,6 @@ def ts_date(s):
 
 def ts_now():
     return int(datetime.datetime.now(datetime.timezone.utc).timestamp())
-
-
-def new_track_id():
-    return secrets.token_hex(6)
 
 
 if __name__ == "__main__":

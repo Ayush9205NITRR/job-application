@@ -4,9 +4,8 @@ I'm Ayush, job hunting. This repo runs a cold-outreach system aimed at founders 
 
 ## Architecture
 - **Grist** (local Docker, http://localhost:8484) = the database + UI. Tables: `Companies`, `Founders`, `Templates`, `Outreach_Log`. Schema is created by `scripts/setup_grist.py`.
-- **Scripts** (`scripts/`) do everything deterministic: `import_csv.py`, `gmail_sync.py` (read-only Gmail API), `sync_views.py`, `build_email_html.py`, `grist_client.py`.
+- **Scripts** (`scripts/`) do everything deterministic: `import_csv.py`, `gmail_sync.py` (read-only Gmail API), `build_email_html.py`, `grist_client.py`.
 - **Claude** (you) does the judgement work: research, intersection, writing, reviewing, summarising. Slash commands: `/import-csv`, `/run-a`, `/run-b`, `/run-c`.
-- **Tracking Worker** (`worker/`, Cloudflare Workers + D1): resume-link click tracking + optional open pixel on my own domain. Events are pulled into Grist by `sync_views.py`.
 - Gmail drafting goes through the Gmail connector (draft only). WhatsApp and LinkedIn are NEVER automated.
 
 ## Hard rules (never break)
@@ -29,14 +28,13 @@ Plain, humble, crisp, slightly witty. Never cocky or salesy, never overclaim ("c
 - Sector moves (MICE -> travel/edtech, B2B -> B2C): don't hide it; frame the transferable part.
 - Never state an unverified fact. If a fact is only from a press release or contributor piece, say so. Anything unverified goes into `Founders.Check_Before_Sending`.
 - Do not mention an AlgoUniversity employee number while resume_facts.md has the NEEDS CONFIRMATION line.
-- Email: max 120 words, bold the 3-4 strongest numbers, mention CV attached (or the tracked link). WhatsApp: max 60 words. LinkedIn note: max 200 chars.
+- Email: max 120 words, bold the 3-4 strongest numbers, mention CV attached (or the RESUME_URL link). WhatsApp: max 60 words. LinkedIn note: max 200 chars.
 
 ## Funnel / status flow (Founders.Status)
 New -> Contact-ready -> Ready -> (I tick Approve) -> Drafted-1 -> Sent-1 -> Drafted-2 -> Sent-2 -> Replied | Bounced | Skip
 
-## Tracking notes
-- Open pixel counts are directional only (Gmail image proxy / Apple Mail pre-fetch inflate them). The tracked resume-link click is the real signal.
-- `PIXEL_ENABLED=false` by default (deliverability caution on a fresh domain). Turn on for a small test batch and compare reply rates.
+## Tracking
+No open pixels, no redirect links, no tracking infrastructure (my decision). Signals are Gmail-derived only: Mails_Sent, Sent-1/Sent-2, Reply, Bounced (via gmail_sync.py). Never add tracking pixels or wrapped links to drafts.
 
 ## Config
 Secrets/URLs live in `.env` (see `.env.example`). Never commit `.env`, `credentials.json`, `token.json`, or CSVs in `imports/`.

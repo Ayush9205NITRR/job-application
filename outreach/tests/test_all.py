@@ -101,11 +101,11 @@ check("skipped", len(skipped), 1)
 check("status p1", people[0]["Status"], "Contact-ready")
 check("status p2", people[1]["Status"], "New")
 
-html = B.md_to_html("Hi **Ayush**\n\n- ₹40 Cr **GMV**\n- 7 hires\n\nCV: {{RESUME_LINK}}", "https://t.x/r/abc", "https://t.x/p/abc.gif")
+html = B.md_to_html("Hi **Ayush**\n\n- ₹40 Cr **GMV**\n- 7 hires\n\nCV: {{RESUME_LINK}}", "https://t.x/cv")
 check("html bold", "<b>Ayush</b>" in html, True)
 check("html ul", "<ul><li>" in html, True)
-check("html link", 'href="https://t.x/r/abc"' in html, True)
-check("html pixel", 'src="https://t.x/p/abc.gif"' in html, True)
+check("html link", 'href="https://t.x/cv"' in html, True)
+check("html no pixel", "<img" in html, False)
 
 if fails:
     print("FAILED:\n" + "\n".join(fails))
