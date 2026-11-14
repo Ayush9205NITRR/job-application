@@ -15,7 +15,7 @@ Zero-cost stack: Grist (local Docker) as the database/UI, Python scripts for the
 7. Tracking: none for now. Reply / Sent / Bounced from Gmail are the signals.
 
 ## Daily loop
-`/run-a` (jobs + founders) -> Apollo export into `imports/` (manual) -> `/run-b` (personalise) -> you review in Grist and tick Approve -> `/run-c` (sync + drafts) -> you send/schedule in Gmail -> next `/run-c` syncs Sent / Replied / views.
+`/run-a` (jobs + founders) -> Apollo export into `imports/` (manual) -> `/run-b` (personalise) -> you review in Grist and tick Approve -> `/run-c` (sync + drafts) -> you send/schedule in Gmail -> next `/run-c` syncs Sent / Replied / Bounced.
 
 ## Grist pages to make (no code)
 - **Review**: Founders card list, filter Status = Ready and Is_Dup = false; show Company_Name, Name, Research_Hook, Email_Subject, Email_Body, WA_Link, LI_Note, Check_Before_Sending, Approve. Click WA_Link = WhatsApp opens with text prefilled.
