@@ -1,0 +1,12 @@
+.env
+credentials.json
+token.json
+persist/
+imports/*
+!imports/.gitkeep
+out/
+__pycache__/
+*.pyc
+node_modules/
+worker/.wrangler/
+.DS_Store

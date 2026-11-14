@@ -1,0 +1,12 @@
+services:
+  grist:
+    image: gristlabs/grist
+    ports:
+      - "8484:8484"
+    volumes:
+      - ./persist:/persist
+    environment:
+      GRIST_SINGLE_ORG: docs
+      GRIST_DEFAULT_EMAIL: you@example.com   # put your own email; it becomes the owner
+      APP_HOME_URL: http://localhost:8484
+    restart: unless-stopped
