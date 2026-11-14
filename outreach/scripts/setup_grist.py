@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Creates the outreach schema inside an existing (empty) Grist document. Safe to re-run.
+"""Creates / upgrades the outreach schema inside an existing Grist document. Safe to re-run:
+missing tables are created, missing columns are added to tables that already exist.
 
   1. docker compose up -d ; open http://localhost:8484 ; create an empty doc "Outreach"
   2. Profile settings > API key. Put GRIST_URL / GRIST_API_KEY / GRIST_DOC_ID in .env
@@ -31,6 +32,7 @@ def col(cid, ctype="Text", formula=None, choices=None, link=False):
 
 FOUNDER_STATUS = ["New", "Contact-ready", "Ready", "Drafted-1", "Sent-1",
                   "Drafted-2", "Sent-2", "Replied", "Bounced", "Skip"]
+STAGES = ["Not sent", "Sent", "Delivered", "Viewed", "Replied", "Bounced"]
 
 COMPANIES = [
     col("Company"), col("Website"),
@@ -61,10 +63,18 @@ FOUNDERS = [
     col("Approve", "Bool"),
     col("Status", "Choice", choices=FOUNDER_STATUS),
     col("Planned_Send", "DateTime:Asia/Kolkata"),
-    # email history (filled by gmail_sync.py)
+    # lifecycle (filled by reverse_map.py): Sent -> Delivered -> Viewed -> Replied
+    col("Stage", "Choice", choices=STAGES),
+    col("Thread_ID"),
+    col("Sent_At", "DateTime:Asia/Kolkata"),
+    col("Viewed_At", "DateTime:Asia/Kolkata"),
+    col("Replied_At", "DateTime:Asia/Kolkata"),
     col("Mails_Sent", "Int"), col("Last_Sent", "Date"),
     col("Sent_1", "Date"), col("Sent_2", "Date"),
+    # follow-up due dates (formulas)
     col("Sent2_Due", "Date", F.F_SENT2_DUE),
+    col("WA1_Due", "Date", F.F_WA1_DUE),
+    col("WA2_Due", "Date", F.F_WA2_DUE),
     # manual channels
     col("WA_Sent", "Bool"), col("WA2_Sent", "Bool"), col("LI_Sent", "Bool"),
     col("Reply", "Choice", choices=["None", "Replied", "Bounced", "Unsubscribed"]),
@@ -81,6 +91,8 @@ LOG = [
     col("At", "DateTime:Asia/Kolkata"), col("Gmail_Msg_Id"), col("Note"),
 ]
 
+SCHEMA = [("Companies", COMPANIES), ("Founders", FOUNDERS), ("Templates", TEMPLATES), ("Outreach_Log", LOG)]
+
 
 def main():
     if not (G.KEY and G.DOC):
@@ -92,29 +104,42 @@ def main():
     if "Table1" in existing and not G.fetch("Table1"):
         actions.append(["RemoveTable", "Table1"])
 
-    for name, cols in [("Companies", COMPANIES), ("Founders", FOUNDERS),
-                       ("Templates", TEMPLATES), ("Outreach_Log", LOG)]:
+    for name, cols in SCHEMA:
         if name in existing:
-            print(f"skip {name} (exists)")
+            print(f"ok   {name} (exists)")
         else:
             actions.append(["AddTable", name, cols])
-            print(f"create {name}")
+            print(f"new  {name}")
     if actions:
         G._call("POST", f"/docs/{G.DOC}/apply", actions)
+
+    # upgrade existing tables: add any column that is missing
+    for name, cols in SCHEMA:
+        if name not in existing:
+            continue
+        have = {c["id"] for c in G._call("GET", f"/docs/{G.DOC}/tables/{name}/columns")["columns"]}
+        add = []
+        for c in cols:
+            if c["id"] not in have:
+                info = {k: v for k, v in c.items() if k != "id"}
+                add.append(["AddColumn", name, c["id"], info])
+        if add:
+            G._call("POST", f"/docs/{G.DOC}/apply", add)
+            print(f"     {name}: added columns {[a[2] for a in add]}")
 
     comp_cols = {c["id"] for c in G._call("GET", f"/docs/{G.DOC}/tables/Companies/columns")["columns"]}
     if "Founders_Count" not in comp_cols:
         G._call("POST", f"/docs/{G.DOC}/apply", [[
             "AddColumn", "Companies", "Founders_Count",
             {"type": "Int", "isFormula": True, "formula": F.F_FOUNDERS_COUNT}]])
-        print("added Companies.Founders_Count")
+        print("     Companies: added Founders_Count")
 
     have = {r["fields"].get("Key") for r in G.fetch("Templates")}
     seed = [k for k in ["email_1", "email_2", "wa_1", "wa_2", "li_note"] if k not in have]
     if seed:
         G.add("Templates", [{"Key": k} for k in seed])
-        print("seeded Templates:", ", ".join(seed))
-    print("\nDone. In Founders > Company column > Column options > SHOW COLUMN = Company.")
+        print("     seeded Templates:", ", ".join(seed))
+    print("\nDone. (First time only) Founders > Company column > Column options > SHOW COLUMN = Company.")
 
 
 if __name__ == "__main__":

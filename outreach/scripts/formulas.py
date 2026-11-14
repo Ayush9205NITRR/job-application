@@ -50,13 +50,36 @@ if not $WA_norm or not $WA2_Msg:
     return ""
 return "https://wa.me/" + $WA_norm + "?text=" + urllib.parse.quote($WA2_Msg)'''
 
+# Follow-up cadence (business days):  Email 1 (D0) -> WhatsApp 1 (+3) -> Email 2 in same thread (+5) -> WhatsApp 2 (+3 after Email 2)
 F_SENT2_DUE = '''import datetime
+if $Reply in ("Replied", "Bounced", "Unsubscribed") or $Status in ("Skip", "Replied", "Bounced"):
+    return None
 if $Status == "Sent-1" and $Sent_1:
     d = $Sent_1 + datetime.timedelta(days=5)
     while d.weekday() >= 5:
         d += datetime.timedelta(days=1)
     return d
 return None'''
+
+F_WA1_DUE = '''import datetime
+if $Reply in ("Replied", "Bounced", "Unsubscribed") or $Status in ("Skip", "Replied", "Bounced"):
+    return None
+if $WA_Sent or not $Sent_1 or not $WA_norm:
+    return None
+d = $Sent_1 + datetime.timedelta(days=3)
+while d.weekday() >= 5:
+    d += datetime.timedelta(days=1)
+return d'''
+
+F_WA2_DUE = '''import datetime
+if $Reply in ("Replied", "Bounced", "Unsubscribed") or $Status in ("Skip", "Replied", "Bounced"):
+    return None
+if $WA2_Sent or not $WA_Sent or not $Sent_2 or not $WA_norm:
+    return None
+d = $Sent_2 + datetime.timedelta(days=3)
+while d.weekday() >= 5:
+    d += datetime.timedelta(days=1)
+return d'''
 
 F_FUNDED_24 = '''return bool($Last_Round_Date) and (TODAY() - $Last_Round_Date).days <= 730'''
 F_FOUNDERS_COUNT = '''return len(Founders.lookupRecords(Company=$id))'''

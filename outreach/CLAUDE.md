@@ -4,7 +4,8 @@ I'm Ayush, job hunting. This repo runs a cold-outreach system aimed at founders 
 
 ## Architecture
 - **Grist** (local Docker, http://localhost:8484) = the database + UI. Tables: `Companies`, `Founders`, `Templates`, `Outreach_Log`. Schema is created by `scripts/setup_grist.py`.
-- **Scripts** (`scripts/`) do everything deterministic: `import_csv.py`, `gmail_sync.py` (read-only Gmail API), `build_email_html.py`, `grist_client.py`.
+- **Scripts** (`scripts/`) do everything deterministic: `import_csv.py`, `reverse_map.py` + `gmail_sync.py` (read-only Gmail API), `build_email_html.py`, `grist_client.py`.
+- **Control panel** (`ui/server.py`, http://localhost:8585): upload CSV, dashboard, contacts, follow-ups, sync. Never sends email.
 - **Claude** (you) does the judgement work: research, intersection, writing, reviewing, summarising. Slash commands: `/import-csv`, `/run-a`, `/run-b`, `/run-c`.
 - Gmail drafting goes through the Gmail connector (draft only). WhatsApp and LinkedIn are NEVER automated.
 
@@ -30,11 +31,14 @@ Plain, humble, crisp, slightly witty. Never cocky or salesy, never overclaim ("c
 - Do not mention an AlgoUniversity employee number while resume_facts.md has the NEEDS CONFIRMATION line.
 - Email: max 120 words, bold the 3-4 strongest numbers, mention CV attached (or the RESUME_URL link). WhatsApp: max 60 words. LinkedIn note: max 200 chars.
 
+## Follow-up cadence (business days)
+Day 0 Email 1 -> Day 1+ LinkedIn note -> +3 WhatsApp 1 -> +5 Email 2 (same thread) -> +3 after Email 2 WhatsApp 2 -> stop. Stops on Reply / Bounced / Unsubscribed / Skip. Due dates: Sent2_Due, WA1_Due, WA2_Due.
+
 ## Funnel / status flow (Founders.Status)
 New -> Contact-ready -> Ready -> (I tick Approve) -> Drafted-1 -> Sent-1 -> Drafted-2 -> Sent-2 -> Replied | Bounced | Skip
 
 ## Tracking
-No open pixels, no redirect links, no tracking infrastructure (my decision). Signals are Gmail-derived only: Mails_Sent, Sent-1/Sent-2, Reply, Bounced (via gmail_sync.py). Never add tracking pixels or wrapped links to drafts.
+No open pixels, no redirect links, no tracking infrastructure (my decision). Signals are Gmail-derived: Stage (Sent / Delivered(inferred) / Replied / Bounced), Mails_Sent, Sent-1/Sent-2 via reverse_map.py. "Viewed" only from a views CSV I provide. Never add tracking pixels or wrapped links to drafts.
 
 ## Config
 Secrets/URLs live in `.env` (see `.env.example`). Never commit `.env`, `credentials.json`, `token.json`, or CSVs in `imports/`.

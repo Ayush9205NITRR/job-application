@@ -6,7 +6,7 @@ argument-hint: [BATCH_SIZE=25]
 RUN C: SYNC, THEN DRAFT. Arguments: $ARGUMENTS. Draft only; sending is blocked by settings and by me.
 
 PART 1: SYNC (always first)
-- `python3 scripts/gmail_sync.py --apply` (read-only Gmail API: Mails_Sent, Last_Sent, Sent-1/Sent-2, Replied, Bounced).
+- `python3 scripts/reverse_map.py --apply` (read-only Gmail API + any `imports/views*.csv`: maps Sent -> Delivered -> Viewed -> Replied / Bounced back onto each person; sets Stage, Sent_At, Replied_At, Thread_ID, Status).
 - Log notable changes (new replies, bounces) in `Outreach_Log`. If a reply says stop/unsubscribe: Reply = "Unsubscribed", Status = "Skip".
 
 PART 2: EMAIL 1 drafts

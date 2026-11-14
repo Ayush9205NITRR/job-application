@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outreach control panel</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --mut:#6b7686; --line:#e3e7ee; --acc:#2563eb; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:10px 20px; display:flex; gap:18px; align-items:center; position:sticky; top:0; z-index:5; }
+  header h1 { font-size:15px; margin:0; font-weight:650; }
+  nav { display:flex; gap:4px; }
+  nav button { background:none; border:0; padding:7px 12px; border-radius:7px; cursor:pointer; color:var(--mut); font-weight:550; }
+  nav button.on { background:#e8efff; color:var(--acc); }
+  main { padding:20px; max-width:1300px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .card h2 { font-size:13px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut); }
+  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
+  .stat { border:1px solid var(--line); border-radius:9px; padding:10px 12px; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { color:var(--mut); font-size:12px; }
+  .bar { display:flex; align-items:center; gap:10px; margin:6px 0; }
+  .bar .lbl { width:230px; color:var(--mut); }
+  .bar .track { flex:1; background:#eef1f6; border-radius:6px; height:16px; overflow:hidden; }
+  .bar .fill { height:100%; background:var(--acc); }
+  .bar .num { width:60px; text-align:right; font-weight:600; }
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; color:var(--mut); font-weight:600; position:sticky; top:49px; background:var(--card); }
+  tr.row:hover { background:#f3f6fc; cursor:pointer; }
+  button.b, a.b { background:var(--acc); color:#fff; border:0; padding:7px 12px; border-radius:7px; cursor:pointer; font-weight:550; text-decoration:none; display:inline-block; }
+  button.g, a.g { background:#fff; color:var(--ink); border:1px solid var(--line); padding:6px 11px; border-radius:7px; cursor:pointer; text-decoration:none; display:inline-block; }
+  button.bad { background:var(--bad); }
+  input[type=text], input[type=search], select, textarea { border:1px solid var(--line); border-radius:7px; padding:6px 9px; font:inherit; background:#fff; }
+  textarea { width:100%; min-height:90px; }
+  .bar2 { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .pill { font-size:11px; padding:2px 8px; border-radius:20px; background:#eef1f6; color:var(--mut); white-space:nowrap; }
+  .pill.Sent,.pill.Delivered { background:#e0f2fe; color:#075985; } .pill.Viewed { background:#ede9fe; color:#5b21b6; }
+  .pill.Replied { background:#dcfce7; color:var(--ok); } .pill.Bounced { background:#fee2e2; color:var(--bad); }
+  .muted { color:var(--mut); } .hide { display:none; }
+  #drawer { position:fixed; top:0; right:0; width:min(560px,100%); height:100%; background:#fff; border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.08); padding:18px; overflow:auto; transform:translateX(105%); transition:transform .18s; z-index:9; }
+  #drawer.open { transform:none; }
+  #drawer label { display:block; font-size:12px; color:var(--mut); margin:12px 0 4px; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; max-height:380px; overflow:auto; white-space:pre-wrap; }
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:9px 16px; border-radius:8px; z-index:20; }
+  .err { color:var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Outreach control panel</h1>
+  <nav id="nav"></nav>
+  <span class="muted" id="conn" style="margin-left:auto"></span>
+</header>
+<main>
+  <section id="tab-dash"></section>
+  <section id="tab-upload" class="hide"></section>
+  <section id="tab-contacts" class="hide"></section>
+  <section id="tab-follow" class="hide"></section>
+  <section id="tab-sync" class="hide"></section>
+</main>
+<aside id="drawer"></aside>
+<script>
+const TABS = [["dash","Dashboard"],["upload","Upload"],["contacts","Contacts"],["follow","Follow-ups"],["sync","Sync"]];
+const STATUSES = ["New","Contact-ready","Ready","Drafted-1","Sent-1","Drafted-2","Sent-2","Replied","Bounced","Skip"];
+const STAGES = ["Not sent","Sent","Delivered","Viewed","Replied","Bounced"];
+let FOUNDERS = [], SELECTED = new Set(), PREVIEW = null, CSVTEXT = "", CSVNAME = "";
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $ = id => document.getElementById(id);
+const fmt = ts => !ts ? "" : new Date(ts*1000).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+const fmtD = ts => !ts ? "" : new Date(ts*1000).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit",timeZone:"UTC"});
+function toast(m, bad){ const t=document.createElement("div"); t.className="toast"; t.textContent=m; if(bad) t.style.background="#b91c1c"; document.body.appendChild(t); setTimeout(()=>t.remove(), 2600); }
+
+async function api(path, body){
+  const opt = body === undefined ? {} : {method:"POST", headers:{"Content-Type":"application/json","X-UI":"1"}, body:JSON.stringify(body)};
+  const r = await fetch(path, opt); const j = await r.json();
+  if(!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+const guard = fn => async (...a) => { try { return await fn(...a); } catch(e){ toast(e.message, true); console.error(e); } };
+
+function show(tab){
+  TABS.forEach(([k]) => $("tab-"+k).classList.toggle("hide", k!==tab));
+  [...$("nav").children].forEach((b,i) => b.classList.toggle("on", TABS[i][0]===tab));
+  ({dash:loadDash, upload:renderUpload, contacts:loadContacts, follow:loadFollow, sync:renderSync})[tab]();
+}
+$("nav").innerHTML = TABS.map(([k,l]) => `<button onclick="show('${k}')">${l}</button>`).join("");
+
+/* ---------- Dashboard ---------- */
+const loadDash = guard(async () => {
+  const s = await api("/api/summary");
+  const max = Math.max(1, ...s.funnel.map(f => f[1]));
+  $("tab-dash").innerHTML = `
+   <div class="card"><h2>Funnel (unique people)</h2>
+     ${s.funnel.map(([l,n]) => `<div class="bar"><div class="lbl">${esc(l)}</div><div class="track"><div class="fill" style="width:${n/max*100}%"></div></div><div class="num">${n}</div></div>`).join("")}
+     <p class="muted">${s.total_rows} rows in Grist, ${s.duplicates} duplicates hidden. "Delivered" is inferred (sent, no bounce). "Viewed" needs a views CSV.</p></div>
+   <div class="grid">
+     <div class="stat"><b>${s.due.email2}</b><span>Email 2 due today</span></div>
+     <div class="stat"><b>${s.due.wa1}</b><span>WhatsApp 1 due</span></div>
+     <div class="stat"><b>${s.due.wa2}</b><span>WhatsApp 2 due</span></div>
+     <div class="stat"><b>${s.by_stage["Replied"]||0}</b><span>Replied</span></div></div>
+   <div class="card" style="margin-top:16px"><h2>By vertical / stage</h2><table><tr><th>Segment</th><th>People</th><th>Sent</th><th>Replied</th></tr>
+     ${Object.entries(s.by_vertical).map(([k,v]) => `<tr><td>${esc(k)}</td><td>${v.people}</td><td>${v.sent}</td><td>${v.replied}</td></tr>`).join("")}</table></div>
+   <div class="card"><h2>By status</h2>${Object.entries(s.by_status).map(([k,v]) => `<span class="pill" style="margin-right:6px">${esc(k)}: ${v}</span>`).join("")}</div>`;
+});
+
+/* ---------- Upload ---------- */
+function renderUpload(){
+  $("tab-upload").innerHTML = `
+   <div class="card"><h2>1. Upload your CSV</h2>
+     <input type="file" id="csvfile" accept=".csv,text/csv"> <button class="b" onclick="previewCsv()">Preview</button>
+     <div id="prev" style="margin-top:14px"></div></div>
+   <div class="card"><h2>Optional: views CSV (any tracker export with an email column)</h2>
+     <p class="muted">Matched back to people by normalised email. Sets Viewed and recomputes Stage. No Gmail login needed.</p>
+     <input type="file" id="viewsfile" accept=".csv,text/csv"> <button class="g" onclick="uploadViews()">Upload views</button>
+     <pre id="viewsout" class="hide"></pre></div>`;
+}
+const readFile = id => new Promise((res, rej) => { const f = $(id).files[0]; if(!f) return rej(new Error("choose a file first")); const r = new FileReader(); r.onload = () => res([f.name, r.result]); r.readAsText(f); });
+const previewCsv = guard(async () => {
+  [CSVNAME, CSVTEXT] = await readFile("csvfile");
+  PREVIEW = await api("/api/csv/preview", {text:CSVTEXT, filename:CSVNAME});
+  drawPreview();
+});
+function drawPreview(){
+  const p = PREVIEW, st = p.stats;
+  $("prev").innerHTML = `
+   <p><b>${st.rows}</b> rows - <b>${st.people}</b> people - <b>${st.companies}</b> companies - <b>${st.duplicates_in_file}</b> duplicates in file - ${st.skipped} skipped<br>
+      with email <b>${st.with_email}</b> - WhatsApp <b>${st.with_whatsapp}</b> - LinkedIn <b>${st.with_linkedin}</b> - designations ${esc(JSON.stringify(st.designations))}</p>
+   <table><tr><th>Grist field</th><th>CSV column</th></tr>
+   ${p.fields.map(f => `<tr><td>${f}</td><td><select onchange="setMap('${f}', this.value)"><option value="">(none)</option>
+      ${p.headers.map(h => `<option ${p.mapping[f]===h?"selected":""}>${esc(h)}</option>`).join("")}</select></td></tr>`).join("")}</table>
+   <p class="muted">Wrong column? change it above; the preview refreshes.</p>
+   <table><tr><th>Name</th><th>Designation</th><th>Email</th><th>WhatsApp</th><th>Status</th></tr>
+     ${st.preview.map(r => `<tr><td>${esc(r.Name)}</td><td>${esc(r.Designation)}</td><td>${esc(r.Email)}</td><td>${esc(r.WhatsApp)}</td><td>${esc(r.Status)}</td></tr>`).join("")}</table>
+   <p><button class="b" onclick="doImport()">Import into Grist</button></p>`;
+}
+const setMap = guard(async (f, h) => {
+  const m = {...PREVIEW.mapping}; if(h) m[f]=h; else delete m[f];
+  const override = {}; PREVIEW.fields.forEach(x => override[x] = m[x] || null);
+  PREVIEW = await api("/api/csv/preview", {text:CSVTEXT, filename:CSVNAME, mapping:override}); drawPreview();
+});
+const doImport = guard(async () => {
+  const override = {}; PREVIEW.fields.forEach(x => override[x] = PREVIEW.mapping[x] || null);
+  const r = await api("/api/csv/import", {text:CSVTEXT, filename:CSVNAME, mapping:override});
+  $("prev").innerHTML = `<p class="muted">Imported: <b>${r.founders_added}</b> founders, <b>${r.new_companies}</b> new companies. Grist now has ${r.founders_total} founders, ${r.is_dup_total} flagged duplicate.</p>
+     <p><button class="b" onclick="show('contacts')">Open contacts</button> <button class="g" onclick="show('sync')">Check who is already emailed (Sync)</button></p>`;
+});
+const uploadViews = guard(async () => {
+  const [name, text] = await readFile("viewsfile");
+  const r = await api("/api/views/upload", {text, filename:name});
+  const o = $("viewsout"); o.classList.remove("hide"); o.textContent = r.output;
+});
+
+/* ---------- Contacts ---------- */
+const loadContacts = guard(async () => {
+  FOUNDERS = (await api("/api/founders")).founders;
+  $("tab-contacts").innerHTML = `
+   <div class="bar2">
+     <input type="search" id="q" placeholder="search name / company / email" oninput="drawContacts()" style="width:260px">
+     <select id="fs" onchange="drawContacts()"><option value="">All status</option>${STATUSES.map(s=>`<option>${s}</option>`).join("")}</select>
+     <select id="fg" onchange="drawContacts()"><option value="">All stage</option>${STAGES.map(s=>`<option>${s}</option>`).join("")}</select>
+     <select id="fa" onchange="drawContacts()"><option value="">Approve: any</option><option value="y">Approved</option><option value="n">Not approved</option></select>
+     <label><input type="checkbox" id="fd" checked onchange="drawContacts()"> hide duplicates</label>
+     <span id="cnt" class="muted"></span></div>
+   <div class="bar2" id="bulk"></div>
+   <div class="card" style="padding:0"><table id="ct"></table></div>`;
+  drawContacts();
+});
+function filtered(){
+  const q = $("q").value.toLowerCase(), s = $("fs").value, g = $("fg").value, a = $("fa").value, d = $("fd").checked;
+  return FOUNDERS.filter(f => (!d || !f.Is_Dup) && (!s || (f.Status||"New")===s) && (!g || (f.Stage||"Not sent")===g)
+    && (!a || (a==="y") === !!f.Approve)
+    && (!q || [f.Name,f.Company_Name,f.Email].join(" ").toLowerCase().includes(q)));
+}
+function drawContacts(){
+  const rows = filtered();
+  $("cnt").textContent = rows.length + " shown";
+  $("bulk").innerHTML = SELECTED.size ? `<b>${SELECTED.size} selected</b>
+     <button class="b" onclick="bulk({Approve:true})">Approve</button><button class="g" onclick="bulk({Approve:false})">Un-approve</button>
+     <button class="g" onclick="bulk({Status:'Skip'})">Mark Skip</button><button class="g" onclick="SELECTED.clear();drawContacts()">Clear</button>` : "";
+  $("ct").innerHTML = `<tr><th><input type="checkbox" onchange="selAll(this.checked)"></th><th>Name</th><th>Company</th><th>Role</th><th>Email</th><th>Status</th><th>Stage</th><th>Approve</th><th>Sent</th><th>Replied</th></tr>` +
+    rows.slice(0,500).map(f => `<tr class="row" onclick="openDrawer(${f.id})">
+      <td onclick="event.stopPropagation()"><input type="checkbox" ${SELECTED.has(f.id)?"checked":""} onchange="sel(${f.id}, this.checked)"></td>
+      <td>${esc(f.Name)}${f.Is_Dup?' <span class="pill">dup</span>':""}</td><td>${esc(f.Company_Name)}</td><td>${esc(f.Designation)}</td><td>${esc(f.Email)}</td>
+      <td><span class="pill">${esc(f.Status||"New")}</span></td><td><span class="pill ${esc(f.Stage)}">${esc(f.Stage||"Not sent")}</span></td>
+      <td onclick="event.stopPropagation()"><input type="checkbox" ${f.Approve?"checked":""} onchange="setField(${f.id},{Approve:this.checked})"></td>
+      <td>${fmt(f.Sent_At)}</td><td>${fmt(f.Replied_At)}</td></tr>`).join("");
+}
+const sel = (id,on) => { on ? SELECTED.add(id) : SELECTED.delete(id); drawContacts(); };
+const selAll = on => { filtered().forEach(f => on ? SELECTED.add(f.id) : SELECTED.delete(f.id)); drawContacts(); };
+const setField = guard(async (id, fields) => { await api("/api/update", {id, fields}); const f = FOUNDERS.find(x=>x.id===id); Object.assign(f, fields); toast("saved"); });
+const bulk = guard(async fields => { await api("/api/bulk", {ids:[...SELECTED], fields}); FOUNDERS.forEach(f => SELECTED.has(f.id) && Object.assign(f, fields)); SELECTED.clear(); drawContacts(); toast("updated"); });
+
+/* ---------- Drawer ---------- */
+function openDrawer(id){
+  const f = FOUNDERS.find(x => x.id===id); if(!f) return;
+  const ta = (k,l) => `<label>${l}</label><textarea data-k="${k}">${esc(f[k])}</textarea>`;
+  $("drawer").innerHTML = `
+   <div style="display:flex;justify-content:space-between"><h3 style="margin:0">${esc(f.Name)} <span class="muted">${esc(f.Company_Name)}</span></h3><button class="g" onclick="closeDrawer()">Close</button></div>
+   <p class="muted">${esc(f.Designation)} - ${esc(f.Email)} - ${esc(f.WhatsApp)}<br>${f.LinkedIn?`<a href="${esc(f.LinkedIn)}" target="_blank" rel="noopener">LinkedIn</a>`:""}
+      <span class="pill ${esc(f.Stage)}">${esc(f.Stage||"Not sent")}</span> sent ${fmt(f.Sent_At)||"-"} - replied ${fmt(f.Replied_At)||"-"}</p>
+   ${f.Check_Before_Sending?`<p class="err"><b>Check before sending:</b> ${esc(f.Check_Before_Sending)}</p>`:""}
+   ${f.Research_Hook?`<p class="muted"><b>Hook:</b> ${esc(f.Research_Hook)}</p>`:""}
+   <label>Status</label><select data-k="Status">${STATUSES.map(s=>`<option ${s===(f.Status||"New")?"selected":""}>${s}</option>`).join("")}</select>
+   <label><input type="checkbox" data-k="Approve" ${f.Approve?"checked":""}> Approve</label>
+   <label>Email subject</label><input type="text" data-k="Email_Subject" value="${esc(f.Email_Subject)}" style="width:100%">
+   ${ta("Email_Body","Email 1")}${ta("Email2_Body","Email 2 (follow-up, same thread)")}${ta("WA_Msg","WhatsApp 1")}${ta("WA2_Msg","WhatsApp 2")}${ta("LI_Note","LinkedIn note (max 200 chars)")}${ta("Notes","Notes")}
+   <p>${f.WA_Link?`<a class="g" href="${esc(f.WA_Link)}" target="_blank" rel="noopener">Open WhatsApp 1</a> `:""}${f.WA2_Link?`<a class="g" href="${esc(f.WA2_Link)}" target="_blank" rel="noopener">Open WhatsApp 2</a>`:""}</p>
+   <p><label><input type="checkbox" data-k="WA_Sent" ${f.WA_Sent?"checked":""}> WhatsApp 1 sent</label>
+      <label><input type="checkbox" data-k="WA2_Sent" ${f.WA2_Sent?"checked":""}> WhatsApp 2 sent</label>
+      <label><input type="checkbox" data-k="LI_Sent" ${f.LI_Sent?"checked":""}> LinkedIn sent</label></p>
+   <p><button class="b" onclick="saveDrawer(${id})">Save</button> <button class="g" onclick="copyText(${id},'Email_Body')">Copy email 1</button> <button class="g" onclick="copyText(${id},'Email2_Body')">Copy email 2</button> <button class="g" onclick="copyText(${id},'LI_Note')">Copy LI note</button></p>`;
+  $("drawer").classList.add("open");
+}
+const closeDrawer = () => $("drawer").classList.remove("open");
+const saveDrawer = guard(async id => {
+  const fields = {};
+  $("drawer").querySelectorAll("[data-k]").forEach(el => fields[el.dataset.k] = el.type==="checkbox" ? el.checked : el.value);
+  await api("/api/update", {id, fields}); Object.assign(FOUNDERS.find(x=>x.id===id), fields); drawContacts(); toast("saved");
+});
+const copyText = (id,k) => { navigator.clipboard.writeText(FOUNDERS.find(x=>x.id===id)[k]||""); toast("copied"); };
+
+/* ---------- Follow-ups ---------- */
+const loadFollow = guard(async () => {
+  const d = await api("/api/followups");
+  FOUNDERS = d.email2.concat(d.wa1, d.wa2);
+  const list = (title, rows, kind) => `<div class="card"><h2>${title} (${rows.length})</h2>${rows.length ? `<table><tr><th>Person</th><th>Company</th><th>Due</th><th>Actions</th></tr>` + rows.map(f => `<tr>
+     <td>${esc(f.Name)}</td><td>${esc(f.Company_Name)}</td><td>${fmtD(kind==="email2"?f.Sent2_Due:kind==="wa1"?f.WA1_Due:f.WA2_Due)}</td><td>
+     ${kind==="email2" ? `<button class="g" onclick="copyText(${f.id},'Email2_Body')">Copy email 2</button> <span class="muted">draft it with /run-c</span>` : ""}
+     ${kind!=="email2" ? `<a class="g" target="_blank" rel="noopener" href="${esc(kind==="wa1"?f.WA_Link:f.WA2_Link)}">Open WhatsApp</a> <button class="b" onclick="markWA(${f.id},'${kind==="wa1"?"WA_Sent":"WA2_Sent"}')">Mark sent</button>` : ""}
+     <button class="g" onclick="openDrawer(${f.id})">Open</button></td></tr>`).join("") + `</table>` : `<p class="muted">Nothing due.</p>`}</div>`;
+  $("tab-follow").innerHTML = `
+   <div class="card"><h2>Follow-up plan (business days, stops on reply / bounce / skip)</h2>
+     <table><tr><th>When</th><th>What</th><th>How</th></tr>
+      <tr><td>Day 0</td><td>Email 1</td><td>/run-c makes the draft; you send it in Gmail</td></tr>
+      <tr><td>Day 1+</td><td>LinkedIn note (200 chars)</td><td>you paste it; tick "LinkedIn sent"</td></tr>
+      <tr><td>Day +3</td><td>WhatsApp 1</td><td>button below opens WhatsApp with the text filled</td></tr>
+      <tr><td>Day +5</td><td>Email 2, same thread</td><td>/run-c makes the draft as a reply in the thread</td></tr>
+      <tr><td>Email 2 + 3</td><td>WhatsApp 2</td><td>same button; then the sequence ends</td></tr></table></div>
+   ${list("Email 2 due", d.email2, "email2")}${list("WhatsApp 1 due", d.wa1, "wa1")}${list("WhatsApp 2 due", d.wa2, "wa2")}`;
+});
+const markWA = guard(async (id, k) => { await api("/api/update", {id, fields:{[k]:true}}); toast("marked sent"); loadFollow(); });
+
+/* ---------- Sync ---------- */
+function renderSync(){
+  $("tab-sync").innerHTML = `
+   <div class="card"><h2>Sent - Delivered - Viewed - Replied</h2>
+     <p class="muted">Reads your Gmail (read-only) and maps every event back to the person by email/thread. Delivered is inferred (sent, no bounce after 1 hour). Viewed comes only from a views CSV (Upload tab). Replied ignores out-of-office auto replies.</p>
+     <button class="g" onclick="run('gmail_dry')">Gmail check (dry run)</button>
+     <button class="b" onclick="run('gmail_apply')">Gmail sync + write to Grist</button>
+     <button class="g" onclick="run('recompute')">Only recompute stages (no Gmail)</button>
+     <p class="muted">First Gmail run opens a Google sign-in in your browser. Do that once from a terminal: <code>python3 scripts/reverse_map.py --dry-run</code></p>
+     <pre id="out" class="hide"></pre></div>`;
+}
+const run = guard(async job => { const o = $("out"); o.classList.remove("hide"); o.textContent = "running... (can take a few minutes for big lists)"; const r = await api("/api/run", {job}); o.textContent = r.output || "(no output)"; });
+
+/* ---------- boot ---------- */
+api("/api/health").then(h => $("conn").textContent = "Grist: " + h.grist).catch(() => $("conn").innerHTML = '<span class="err">server not reachable</span>');
+show("dash");
+</script>
+</body>
+</html>

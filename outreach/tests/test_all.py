@@ -34,10 +34,10 @@ for raw, want in {"https://www.linkedin.com/in/foo-bar/?utm=1": "linkedin.com/in
                   "http://linkedin.com/in/foo-bar/": "linkedin.com/in/foo-bar"}.items():
     check(f"li {raw!r}", li(LinkedIn=raw), want)
 
-due = F.compile_formula(F.F_SENT2_DUE, "Status", "Sent_1")
-check("due thu", due(Status="Sent-1", Sent_1=datetime.date(2026, 11, 12)), datetime.date(2026, 11, 17))
-check("due fri", due(Status="Sent-1", Sent_1=datetime.date(2026, 11, 13)), datetime.date(2026, 11, 18))
-check("due none", due(Status="Ready", Sent_1=None), None)
+due = F.compile_formula(F.F_SENT2_DUE, "Reply", "Status", "Sent_1")
+check("due thu", due(Reply=None, Status="Sent-1", Sent_1=datetime.date(2026, 11, 12)), datetime.date(2026, 11, 17))
+check("due fri", due(Reply=None, Status="Sent-1", Sent_1=datetime.date(2026, 11, 13)), datetime.date(2026, 11, 18))
+check("due none", due(Reply=None, Status="Ready", Sent_1=None), None)
 
 f24 = F.compile_formula(F.F_FUNDED_24, "Last_Round_Date")
 check("funded recent", f24(Last_Round_Date=datetime.date.today() - datetime.timedelta(days=100)), True)
