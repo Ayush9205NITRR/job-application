@@ -9,4 +9,5 @@ services:
       GRIST_SINGLE_ORG: docs
       GRIST_DEFAULT_EMAIL: you@example.com   # put your own email; it becomes the owner
       APP_HOME_URL: http://localhost:8484
+      GRIST_IN_SERVICE: "true"   # skip the /boot setup screen on new Grist versions
     restart: unless-stopped
