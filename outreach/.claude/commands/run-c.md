@@ -1,5 +1,5 @@
 ---
-description: Sync Gmail + views, then create Gmail DRAFTS for approved rows (never sends)
+description: Sync Gmail, then create Gmail DRAFTS for approved rows (never sends)
 argument-hint: [BATCH_SIZE=25]
 ---
 
