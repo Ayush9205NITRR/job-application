@@ -4,7 +4,7 @@ Zero-cost stack: Grist as the database **and** the UI, Python scripts for the de
 
 Grist is a spreadsheet-database with its own pages, filters and charts, so there is no separate dashboard to build or host: `scripts/make_pages.py` builds the Review / Pipeline / Duplicates / Funnel / Data health pages inside the document, and you can rearrange them by clicking.
 
-**First time on a laptop? Follow [LAPTOP_SETUP.md](LAPTOP_SETUP.md)** — every step from clone to dashboard.
+**First time on a laptop?** Fill in `.env` and run `./setup.sh` — it does the lot in about fifteen seconds. Step by step: [LAPTOP_SETUP.md](LAPTOP_SETUP.md).
 
 ## Where to run Grist
 

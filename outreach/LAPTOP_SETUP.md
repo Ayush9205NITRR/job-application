@@ -16,6 +16,22 @@ Commands do tarah ke diye hain: **macOS / Linux** aur **Windows (PowerShell)**. 
 
 ---
 
+## Sabse chhota raasta (ek command)
+
+Docker ki zaroorat nahi. Step 1 aur Step 2A karo (code + Grist account), `.env` bharo, phir:
+
+```bash
+./setup.sh
+```
+
+Ye packages install karta hai, tests chalata hai, tables banata hai, workbook import karta hai aur
+dashboard pages bana deta hai — ~15 second. Dobara chalana safe hai.
+Kuch adhoora ho to saaf-saaf batata hai ki kya karna hai.
+
+Niche ke steps wahi cheezein ek-ek karke hain, agar alag se chalani hon.
+
+---
+
 ## Step 1 — Code laao
 
 ```bash
