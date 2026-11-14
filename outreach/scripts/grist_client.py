@@ -42,10 +42,27 @@ KEY = os.environ.get("GRIST_API_KEY", "")
 DOC = os.environ.get("GRIST_DOC_ID", "")
 
 FORMULA_COLS = {"Email_norm", "WA_norm", "LI_norm", "Is_Dup", "WA_Link", "WA2_Link",
-                "Sent2_Due", "Funded_24mo", "Founders_Count", "Company_Name"}
+                "Sent2_Due", "Funded_24mo", "Founders_Count", "Company_Name",
+                "WA1_Due", "WA2_Due"}
+
+# Grist's free cloud plan allows 3000 API calls a month across the whole site, so every call counts.
+# refresh.py records this in Refresh_Runs.Api_Calls and the tests assert a refresh stays small.
+_CALLS = 0
+
+
+def calls():
+    """How many HTTP calls this process has made to Grist."""
+    return _CALLS
+
+
+def reset_calls():
+    global _CALLS
+    _CALLS = 0
 
 
 def _call(method, path, body=None):
+    global _CALLS
+    _CALLS += 1
     req = urllib.request.Request(
         URL + "/api" + path,
         method=method,
@@ -83,12 +100,20 @@ def add(table, rows, chunk=200):
 
 
 def update(table, rows, chunk=200):
-    for i in range(0, len(rows), chunk):
-        part = rows[i:i + chunk]
-        bad = FORMULA_COLS & {k for r in part for k in r.get("fields", {})}
-        if bad:
-            raise SystemExit(f"refusing to write formula columns: {sorted(bad)}")
-        _call("PATCH", f"/docs/{DOC}/tables/{table}/records", {"records": part})
+    """PATCH rows, each {"id": .., "fields": {..}}.
+
+    Grist rejects a PATCH whose records do not all carry the same field names, so rows are grouped by
+    their set of fields and each group is sent on its own.
+    """
+    bad = FORMULA_COLS & {k for r in rows for k in r.get("fields", {})}
+    if bad:
+        raise SystemExit(f"refusing to write formula columns: {sorted(bad)}")
+    groups = {}
+    for r in rows:
+        groups.setdefault(tuple(sorted(r.get("fields", {}))), []).append(r)
+    for part in groups.values():
+        for i in range(0, len(part), chunk):
+            _call("PATCH", f"/docs/{DOC}/tables/{table}/records", {"records": part[i:i + chunk]})
 
 
 def ts_date(s):

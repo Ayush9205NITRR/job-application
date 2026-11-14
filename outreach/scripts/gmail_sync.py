@@ -23,6 +23,7 @@ Status rules (only rows with Is_Dup = false):
 import argparse
 import datetime
 import json
+import os
 import pathlib
 import sys
 import time
@@ -38,10 +39,26 @@ PRE_SENT2 = PRE_SENT | {"Sent-1", "Drafted-2"}
 
 
 def gmail_service():
+    """Read-only Gmail.
+
+    On a laptop this opens a browser once and remembers the result in token.json.
+    On a server there is no browser, so GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN
+    are used directly when all three are set. See the README for getting a refresh token.
+    """
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
+
+    cid = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+    secret = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
+    refresh = os.environ.get("GOOGLE_REFRESH_TOKEN", "").strip()
+    if cid and secret and refresh:
+        creds = Credentials(None, refresh_token=refresh, client_id=cid, client_secret=secret,
+                            token_uri="https://oauth2.googleapis.com/token", scopes=SCOPES)
+        creds.refresh(Request())
+        return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+    from google_auth_oauthlib.flow import InstalledAppFlow
 
     tok = ROOT / "token.json"
     creds = Credentials.from_authorized_user_file(str(tok), SCOPES) if tok.exists() else None
@@ -49,7 +66,12 @@ def gmail_service():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(str(ROOT / "credentials.json"), SCOPES)
+            cred_file = ROOT / "credentials.json"
+            if not cred_file.exists():
+                sys.exit("No Gmail credentials. Either put credentials.json in the repo root for the "
+                         "browser sign-in, or set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / "
+                         "GOOGLE_REFRESH_TOKEN (see the README).")
+            flow = InstalledAppFlow.from_client_secrets_file(str(cred_file), SCOPES)
             creds = flow.run_local_server(port=0)
         tok.write_text(creds.to_json())
     return build("gmail", "v1", credentials=creds, cache_discovery=False)

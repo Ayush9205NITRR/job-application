@@ -10,3 +10,4 @@ __pycache__/
 node_modules/
 worker/.wrangler/
 .DS_Store
+.refresh_state.json

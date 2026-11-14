@@ -217,6 +217,35 @@ def build_updates(rows, ginfo, views, now_ts):
     return updates, stats
 
 
+def run(apply=False, skip_gmail=False, views_csv=(), limit=None, quiet=False):
+    """Map Gmail (and any views CSV) back onto Founders. Returns a stats dict.
+
+    refresh.py calls this directly, so that its Grist calls land in the same budget.
+    """
+    rows = [r for r in G.fetch("Founders") if not r["fields"].get("Is_Dup")]
+    if limit:
+        rows = rows[:limit]
+    now_ts = int(time.time())
+    vpaths = list(views_csv) or sorted(glob.glob(str(ROOT / "imports" / "views*.csv")))
+    views = load_views(vpaths, now_ts)
+    ginfo = {}
+    if not skip_gmail:
+        from gmail_sync import addrs_for
+        ginfo = gmail_info([r for r in rows if addrs_for(r["fields"])])
+    updates, stats = build_updates(rows, ginfo, views, now_ts)
+    out = {"founders": len(rows),
+           "views_rows_matched": sum(1 for r in rows if r["fields"].get("Email_norm") in views),
+           "stage_counts": dict(stats), "updated": len(updates), "gmail_checked": not skip_gmail}
+    if apply:
+        G.update("Founders", updates)
+    else:
+        out["updated"] = 0
+    if not quiet:
+        print(json.dumps(out, indent=1))
+        print(f"wrote {len(updates)} rows to Grist" if apply else "(dry run, nothing written)")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
@@ -227,25 +256,7 @@ def main():
     a = ap.parse_args()
     if not (a.apply or a.dry_run):
         sys.exit("choose --dry-run or --apply")
-
-    rows = [r for r in G.fetch("Founders") if not r["fields"].get("Is_Dup")]
-    if a.limit:
-        rows = rows[: a.limit]
-    now_ts = int(time.time())
-    vpaths = a.views_csv or sorted(glob.glob(str(ROOT / "imports" / "views*.csv")))
-    views = load_views(vpaths, now_ts)
-    ginfo = {}
-    if not a.skip_gmail:
-        from gmail_sync import addrs_for
-        ginfo = gmail_info([r for r in rows if addrs_for(r["fields"])])
-    updates, stats = build_updates(rows, ginfo, views, now_ts)
-    print(json.dumps({"founders": len(rows), "views_rows_matched": sum(1 for r in rows if (r["fields"].get("Email_norm") in views)),
-                      "stage_counts": dict(stats)}, indent=1))
-    if a.apply:
-        G.update("Founders", updates)
-        print(f"wrote {len(updates)} rows to Grist")
-    else:
-        print("(dry run, nothing written)")
+    run(apply=a.apply, skip_gmail=a.skip_gmail, views_csv=a.views_csv, limit=a.limit)
 
 
 if __name__ == "__main__":

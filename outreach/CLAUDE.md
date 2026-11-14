@@ -3,9 +3,9 @@
 I'm Ayush, job hunting. This repo runs a cold-outreach system aimed at founders of funded startups (Travel, Edtech; Seed / Series A / Series B; raised in the last 24 months). Goal of every message: get a REPLY from the founder that moves me toward being hired onto their team.
 
 ## Architecture
-- **Grist** (local Docker, http://localhost:8484) = the database + UI. Tables: `Companies`, `Founders`, `Templates`, `Outreach_Log`. Schema is created by `scripts/setup_grist.py`.
-- **Scripts** (`scripts/`) do everything deterministic: `import_csv.py`, `reverse_map.py` + `gmail_sync.py` (read-only Gmail API), `build_email_html.py`, `grist_client.py`.
-- **Control panel** (`ui/server.py`, http://localhost:8585): upload CSV, dashboard, contacts, follow-ups, sync. Never sends email.
+- **Grist** = the database AND the UI (hosted at docs.getgrist.com, or local Docker on :8484 — only `GRIST_URL` differs). Tables: `Companies`, `Founders`, `Templates`, `Outreach_Log`, `Data_Issues`, `Refresh_Runs`. Schema: `scripts/setup_grist.py`. Dashboard pages (Review / Pipeline / Duplicates / Funnel / Data health): `scripts/make_pages.py`. Both are safe to re-run.
+- **Scripts** (`scripts/`) do everything deterministic: `import_csv.py` (Apollo CSVs), `tracker_clean.py` + `import_tracker.py` (the outreach tracker workbook), `reverse_map.py` + `gmail_sync.py` (read-only Gmail API), `refresh.py` (scheduled), `build_email_html.py`, `grist_client.py`.
+- **Control panel** (`ui/server.py`, http://localhost:8585): optional, local only. Grist's own pages are the dashboard.
 - **Claude** (you) does the judgement work: research, intersection, writing, reviewing, summarising. Slash commands: `/import-csv`, `/run-a`, `/run-b`, `/run-c`.
 - Gmail drafting goes through the Gmail connector (draft only). WhatsApp and LinkedIn are NEVER automated.
 
@@ -18,6 +18,8 @@ I'm Ayush, job hunting. This repo runs a cold-outreach system aimed at founders 
 6. NEVER delete rows, drafts, or mail. NEVER touch rows outside the Status filter of the command you're running.
 7. Work in batches (BATCH_SIZE default 10; 25 drafts/day max). On a row error: write the reason to Notes, continue.
 8. Dates/DateTimes over the Grist API are unix seconds (`ts_date`, `ts_now` in grist_client.py).
+9. Grist's free plan allows 3000 API calls a month for the WHOLE site. Batch reads and writes; `grist_client.calls()` reports the count and `refresh.py` records it in `Refresh_Runs.Api_Calls`. A scheduled refresh runs 3x/day and costs under ten calls.
+10. An import must never clobber my own edits: `Approve`, `Status`, `Notes`, `Check_Before_Sending` and the Sent flags are left alone once they hold a value (`USER_OWNED` in import_tracker.py).
 
 ## Voice
 Plain, humble, crisp, slightly witty. Never cocky or salesy, never overclaim ("completely off your plate" was rejected). One easy ask: "Could we have a quick chat?".
