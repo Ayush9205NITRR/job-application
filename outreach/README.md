@@ -47,6 +47,16 @@ Three of the workbook's tables describe the same people, so they are merged on t
 
 Funding stage arrives written 18 different ways ("Seed / Bootstrapped", "Series A / YC W21"); it is tidied to one value for charting, with the original kept in `Stage_Raw`.
 
+## A clean copy as Excel
+
+`python3 scripts/export_clean.py --file imports/<file>.xlsx` writes a tidy workbook to `out/`: a Summary
+sheet with the headline numbers, then one sheet per table, plus every problem found. `--from-grist`
+exports what is in Grist right now instead.
+
+The export imports again exactly like the original — `tracker_clean` reads both layouts, and the tests
+check that the round trip gives the same people, companies and statuses — so either file can go in
+`imports/`. `out/` is gitignored: these sheets hold real names, addresses and phone numbers.
+
 ## Keeping it current
 
 `python3 scripts/refresh.py --apply` picks up anything new in `imports/` (by file hash, so unchanged files cost nothing) and then asks Gmail what happened to the mail. It writes a row to `Refresh_Runs` each time and exits non-zero if it could not do its job.

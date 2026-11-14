@@ -142,7 +142,10 @@ Yahi `Outreach_Log` ke `Founder` column ke liye bhi karo. (Ek hi baar ka kaam.)
 
 ## Step 7 — Purana tracker data daalo
 
-Workbook ko `imports/` folder mein copy karo, phir:
+Workbook ko `imports/` folder mein copy karo. **Original messy file hi daalo** — script usi ko theek
+karne ke liye bani hai. (`scripts/export_clean.py` ka saaf output bhi chalega; dono padh leta hai.)
+
+Phir:
 
 ```bash
 python3 scripts/import_tracker.py --file imports/Email_Outreach_Tracker.xlsx --dry-run
@@ -261,6 +264,8 @@ source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 | Gmail se status update | `python3 scripts/refresh.py --apply` |
 | Sirf dekhna kya badlega | `python3 scripts/refresh.py --dry-run` |
 | Pages dobara banana | `python3 scripts/make_pages.py` |
+| Saaf Excel file banana | `python3 scripts/export_clean.py --file imports/<file>.xlsx` → `out/` mein |
+| Grist ka data Excel mein | `python3 scripts/export_clean.py --from-grist` |
 | Kaam karna | Grist kholo — **Review** page pe approve karo, baaki pages dekho |
 
 Drafts likhwane ke liye Claude Code `outreach` folder ke andar se kholo aur `/run-b`, `/run-c` chalao.
@@ -275,6 +280,7 @@ Drafts likhwane ke liye Claude Code `outreach` folder ke andar se kholo aur `/ru
 | `Cannot reach Grist at ...` | Hosted: URL `https://docs.getgrist.com` hona chahiye. Local: `docker compose up -d` chala hai? |
 | `HTTP 401 ... invalid API key` | API key galat ya adhoori copy hui |
 | `No such file: imports/...` | Workbook `imports/` folder mein nahi hai |
+| `I do not recognise this workbook` | Wo file na original tracker hai na hamara export — message mein likha hai kaunsi sheets chahiye |
 | `ModuleNotFoundError: openpyxl` | venv activate nahi hua, ya `pip install -r requirements.txt` nahi chala |
 | Grist pe `/boot` screen | Sirf local pe hota hai; `docker-compose.yml` mein `GRIST_IN_SERVICE` isse rokta hai — `docker compose up -d` dobara chalao |
 | `table Founders is missing` | Pehle `python3 scripts/setup_grist.py` chalao |

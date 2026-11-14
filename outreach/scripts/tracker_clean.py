@@ -331,9 +331,83 @@ def _read_plain(wb, name, width, rep, date_fields=(), email_field=None, dup_key=
     return rows
 
 
+# Sheet names used by the tidy export (scripts/export_clean.py). clean_workbook reads these back, so a
+# cleaned workbook can be dropped into imports/ just like the original.
+TIDY_SHEETS = {
+    "leads": "Leads",
+    "email_log": "Email log",
+    "followup_drafts": "Follow-up drafts",
+    "companies": "Companies",
+    "decision_makers": "Decision makers",
+    "deleted": "Deleted drafts",
+}
+ISSUES_SHEET = "Data issues"
+# Internal flags, shown under a readable name in the export and read back from it.
+PROVENANCE = {"_layout": "Row layout", "_recovered": "Recovered from crushed cell"}
+
+
+def unpretty(header):
+    """"Recipient email" -> "recipient_email". The inverse of export_clean.pretty()."""
+    return re.sub(r"\s+", "_", clean_str(header).strip().lower())
+
+
+def _read_tidy(wb):
+    """Read a workbook this project wrote itself: one sheet per table, header on row 1."""
+    tables, issues = {}, []
+    reverse = {v: k for k, v in PROVENANCE.items()}
+    for key, sheet in TIDY_SHEETS.items():
+        ws = wb[sheet]
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            tables[key] = []
+            continue
+        header = [clean_str(c) for c in rows[0]]
+        out = []
+        for vals in rows[1:]:
+            if _is_blank(vals):
+                continue
+            rec = {}
+            for name, v in zip(header, vals):
+                if not name:
+                    continue
+                col = reverse.get(name) or unpretty(name)
+                rec[col] = v if isinstance(v, (int, float)) else clean_str(v)
+            rec["_recovered"] = str(rec.get("_recovered", "")).lower() in ("yes", "true", "1")
+            out.append(rec)
+        tables[key] = out
+    if ISSUES_SHEET in wb.sheetnames:
+        ws = wb[ISSUES_SHEET]
+        rows = list(ws.iter_rows(values_only=True))
+        header = [clean_str(c).lower() for c in rows[0]] if rows else []
+        for vals in rows[1:]:
+            if _is_blank(vals):
+                continue
+            d = dict(zip(header, [clean_str(v) for v in vals]))
+            issues.append({"sheet": d.get("sheet", ""), "kind": d.get("type", d.get("kind", "")),
+                           "detail": d.get("detail", ""), "sev": d.get("severity", d.get("sev", "warn"))})
+    return tables, issues
+
+
 def clean_workbook(path):
-    """-> {"tables": {leads, email_log, followup_drafts, companies, decision_makers, deleted}, "issues": [...]}"""
+    """-> {"tables": {leads, email_log, followup_drafts, companies, decision_makers, deleted}, "issues": [...]}
+
+    Takes either the original tracker workbook (Master + Followups, which need repairing) or a tidy one
+    this project exported earlier.
+    """
     wb = openpyxl.load_workbook(path, data_only=True, read_only=False)
+    sheets = set(wb.sheetnames)
+
+    if not {"Master", "Followups"} <= sheets:
+        if set(TIDY_SHEETS.values()) <= sheets:
+            tables, issues = _read_tidy(wb)
+            return {"tables": tables, "issues": issues}
+        raise SystemExit(
+            f"{pathlib.Path(path).name}: I do not recognise this workbook.\n"
+            f"  It has: {', '.join(sorted(sheets)) or '(no sheets)'}\n"
+            f"  I can read either the original tracker (sheets Master and Followups)\n"
+            f"  or a tidy export from scripts/export_clean.py "
+            f"(sheets {', '.join(TIDY_SHEETS.values())}).")
+
     rep = _Report()
 
     leads = _read_master(wb, rep)

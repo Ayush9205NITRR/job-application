@@ -149,6 +149,47 @@ if WORKBOOK.exists():
         if G.FORMULA_COLS & set(p["fields"]):
             fails.append(f"import would write a formula column: {G.FORMULA_COLS & set(p['fields'])}")
             break
+
+    # ---------------------------------------------------------- the tidy export round trip
+    # A workbook we exported has to import exactly like the original, or dropping it into imports/
+    # would quietly produce different numbers.
+    import tempfile
+
+    import export_clean as EC  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "clean.xlsx"
+        EC.build(cleaned, out, "test")
+        again = TC.clean_workbook(out)
+
+        check("round trip: row counts", TC.summarise(again)["rows"], s["rows"])
+        for field in ("attempted", "delivered", "replied", "bounced", "queued",
+                      "recovered_leads", "shifted_leads", "leads_without_email"):
+            check(f"round trip: {field}", TC.summarise(again)[field], s[field])
+
+        people2 = IT.build_people(again)
+        check("round trip: people", len(people2), len(people))
+        check("round trip: companies", len(IT.build_companies(again)), len(companies))
+        addresses2 = sorted(p["fields"]["Email"] for p in people2.values() if p["fields"].get("Email"))
+        check("round trip: same addresses", addresses2, sorted(addresses))
+        status2 = {}
+        for p in people2.values():
+            status2[p["fields"].get("Status")] = status2.get(p["fields"].get("Status"), 0) + 1
+        check("round trip: same statuses", status2, status)
+
+        # a workbook that is neither layout explains itself instead of raising KeyError
+        import openpyxl
+
+        junk = pathlib.Path(tmp) / "junk.xlsx"
+        wbj = openpyxl.Workbook()
+        wbj.active.title = "Something else"
+        wbj.save(junk)
+        try:
+            TC.clean_workbook(junk)
+            fails.append("an unrecognised workbook should have been refused")
+        except SystemExit as e:
+            check("unknown workbook names its sheets", "Something else" in str(e), True)
+            check("unknown workbook says what it wants", "Master" in str(e), True)
 else:
     print(f"(skipped workbook checks: {WORKBOOK} not present)")
 
