@@ -38,7 +38,13 @@
   .pill { font-size:11px; padding:2px 8px; border-radius:20px; background:#eef1f6; color:var(--mut); white-space:nowrap; }
   .pill.Sent,.pill.Delivered { background:#e0f2fe; color:#075985; } .pill.Viewed { background:#ede9fe; color:#5b21b6; }
   .pill.Replied { background:#dcfce7; color:var(--ok); } .pill.Bounced { background:#fee2e2; color:var(--bad); }
+  .pill.warn { background:#fef3c7; color:var(--warn); cursor:help; }
+  .cnt { font-size:11px; font-weight:600; color:var(--mut); }
+  .cnt.over { color:var(--bad); }
   .muted { color:var(--mut); } .hide { display:none; }
+  #pvbox { border:1px solid var(--line); border-radius:8px; margin-top:10px; overflow:hidden; }
+  #pvbox .head { background:#f6f7f9; border-bottom:1px solid var(--line); padding:7px 10px; font-size:12px; }
+  #pvframe { width:100%; height:300px; border:0; background:#fff; display:block; }
   #drawer { position:fixed; top:0; right:0; width:min(560px,100%); height:100%; background:#fff; border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.08); padding:18px; overflow:auto; transform:translateX(105%); transition:transform .18s; z-index:9; }
   #drawer.open { transform:none; }
   #drawer label { display:block; font-size:12px; color:var(--mut); margin:12px 0 4px; }
@@ -163,18 +169,25 @@ const loadContacts = guard(async () => {
      <select id="fg" onchange="drawContacts()"><option value="">All stage</option>${STAGES.map(s=>`<option>${s}</option>`).join("")}</select>
      <select id="fa" onchange="drawContacts()"><option value="">Approve: any</option><option value="y">Approved</option><option value="n">Not approved</option></select>
      <label><input type="checkbox" id="fd" checked onchange="drawContacts()"> hide duplicates</label>
+     <label><input type="checkbox" id="fw" onchange="drawContacts()"> only ones to check</label>
      <span id="cnt" class="muted"></span></div>
    <div class="bar2" id="bulk"></div>
    <div class="card" style="padding:0"><table id="ct"></table></div>`;
   drawContacts();
 });
+/* The contacts controls only exist on that tab, so fall back to the whole list when the drawer is
+   opened from Follow-ups. Otherwise saving from there would throw on a missing input. */
 function filtered(){
-  const q = $("q").value.toLowerCase(), s = $("fs").value, g = $("fg").value, a = $("fa").value, d = $("fd").checked;
+  if(!$("q")) return FOUNDERS;
+  const q = $("q").value.toLowerCase(), s = $("fs").value, g = $("fg").value, a = $("fa").value,
+        d = $("fd").checked, w = $("fw").checked;
   return FOUNDERS.filter(f => (!d || !f.Is_Dup) && (!s || (f.Status||"New")===s) && (!g || (f.Stage||"Not sent")===g)
     && (!a || (a==="y") === !!f.Approve)
+    && (!w || !!(f.Check_Before_Sending||"").trim())
     && (!q || [f.Name,f.Company_Name,f.Email].join(" ").toLowerCase().includes(q)));
 }
 function drawContacts(){
+  if(!$("ct")) return;
   const rows = filtered();
   $("cnt").textContent = rows.length + " shown";
   $("bulk").innerHTML = SELECTED.size ? `<b>${SELECTED.size} selected</b>
@@ -183,7 +196,7 @@ function drawContacts(){
   $("ct").innerHTML = `<tr><th><input type="checkbox" onchange="selAll(this.checked)"></th><th>Name</th><th>Company</th><th>Role</th><th>Email</th><th>Status</th><th>Stage</th><th>Approve</th><th>Sent</th><th>Replied</th></tr>` +
     rows.slice(0,500).map(f => `<tr class="row" onclick="openDrawer(${f.id})">
       <td onclick="event.stopPropagation()"><input type="checkbox" ${SELECTED.has(f.id)?"checked":""} onchange="sel(${f.id}, this.checked)"></td>
-      <td>${esc(f.Name)}${f.Is_Dup?' <span class="pill">dup</span>':""}</td><td>${esc(f.Company_Name)}</td><td>${esc(f.Designation)}</td><td>${esc(f.Email)}</td>
+      <td>${esc(f.Name)}${f.Is_Dup?' <span class="pill">dup</span>':""}${warnPill(f)}</td><td>${esc(f.Company_Name)}</td><td>${esc(f.Designation)}</td><td>${esc(f.Email)}</td>
       <td><span class="pill">${esc(f.Status||"New")}</span></td><td><span class="pill ${esc(f.Stage)}">${esc(f.Stage||"Not sent")}</span></td>
       <td onclick="event.stopPropagation()"><input type="checkbox" ${f.Approve?"checked":""} onchange="setField(${f.id},{Approve:this.checked})"></td>
       <td>${fmt(f.Sent_At)}</td><td>${fmt(f.Replied_At)}</td></tr>`).join("");
@@ -194,11 +207,37 @@ const setField = guard(async (id, fields) => { await api("/api/update", {id, fie
 const bulk = guard(async fields => { await api("/api/bulk", {ids:[...SELECTED], fields}); FOUNDERS.forEach(f => SELECTED.has(f.id) && Object.assign(f, fields)); SELECTED.clear(); drawContacts(); toast("updated"); });
 
 /* ---------- Drawer ---------- */
+/* House limits from CLAUDE.md: email 120 words, WhatsApp 60, LinkedIn note 200 characters. */
+const LIMITS = {Email_Body:[120,"words"], Email2_Body:[120,"words"], WA_Msg:[60,"words"], WA2_Msg:[60,"words"], LI_Note:[200,"chars"]};
+const warnPill = f => (f.Check_Before_Sending||"").trim()
+  ? ` <span class="pill warn" title="${esc(f.Check_Before_Sending)}">&#9888; check</span>` : "";
+
+function count(k){
+  const el = $("drawer").querySelector(`[data-k="${k}"]`), out = $("cnt-"+k);
+  if(!el || !out) return;
+  const [lim, unit] = LIMITS[k];
+  const n = unit==="chars" ? el.value.length : (el.value.match(/\S+/g)||[]).length;
+  out.textContent = `${n} / ${lim} ${unit}`;
+  out.classList.toggle("over", n > lim);
+}
+const countAll = () => Object.keys(LIMITS).forEach(count);
+
+/* Where this person sits in the list you are working through, so Save & Next has somewhere to go. */
+function drawerPos(id){
+  const list = filtered(), i = list.findIndex(x => x.id===id);
+  return {i, n:list.length, next: (i>=0 && i+1<list.length) ? list[i+1].id : null};
+}
+
 function openDrawer(id){
   const f = FOUNDERS.find(x => x.id===id); if(!f) return;
-  const ta = (k,l) => `<label>${l}</label><textarea data-k="${k}">${esc(f[k])}</textarea>`;
+  const pos = drawerPos(id);
+  const ta = (k,l) => `<label>${l}${LIMITS[k]?` <span class="cnt" id="cnt-${k}"></span>`:""}</label>`
+    + `<textarea data-k="${k}"${LIMITS[k]?` oninput="count('${k}')"`:""}>${esc(f[k])}</textarea>`;
   $("drawer").innerHTML = `
-   <div style="display:flex;justify-content:space-between"><h3 style="margin:0">${esc(f.Name)} <span class="muted">${esc(f.Company_Name)}</span></h3><button class="g" onclick="closeDrawer()">Close</button></div>
+   <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+     <h3 style="margin:0">${esc(f.Name)} <span class="muted">${esc(f.Company_Name)}</span></h3>
+     <span class="muted" style="margin-left:auto">${pos.i>=0?`${pos.i+1} of ${pos.n}`:""}</span>
+     <button class="g" onclick="closeDrawer()">Close</button></div>
    <p class="muted">${esc(f.Designation)} - ${esc(f.Email)} - ${esc(f.WhatsApp)}<br>${f.LinkedIn?`<a href="${esc(f.LinkedIn)}" target="_blank" rel="noopener">LinkedIn</a>`:""}
       <span class="pill ${esc(f.Stage)}">${esc(f.Stage||"Not sent")}</span> sent ${fmt(f.Sent_At)||"-"} - replied ${fmt(f.Replied_At)||"-"}</p>
    ${f.Check_Before_Sending?`<p class="err"><b>Check before sending:</b> ${esc(f.Check_Before_Sending)}</p>`:""}
@@ -211,14 +250,51 @@ function openDrawer(id){
    <p><label><input type="checkbox" data-k="WA_Sent" ${f.WA_Sent?"checked":""}> WhatsApp 1 sent</label>
       <label><input type="checkbox" data-k="WA2_Sent" ${f.WA2_Sent?"checked":""}> WhatsApp 2 sent</label>
       <label><input type="checkbox" data-k="LI_Sent" ${f.LI_Sent?"checked":""}> LinkedIn sent</label></p>
-   <p><button class="b" onclick="saveDrawer(${id})">Save</button> <button class="g" onclick="copyText(${id},'Email_Body')">Copy email 1</button> <button class="g" onclick="copyText(${id},'Email2_Body')">Copy email 2</button> <button class="g" onclick="copyText(${id},'LI_Note')">Copy LI note</button></p>`;
+   <p><button class="b" onclick="saveDrawer(${id})">Save</button>
+      <button class="b" onclick="saveNext(${id})">Save &amp; next</button>
+      <button class="b" onclick="saveNext(${id}, true)">Approve &amp; next</button></p>
+   <p><button class="g" onclick="previewEmail(${id})">Preview email HTML</button>
+      <button class="g" onclick="copyText(${id},'Email_Body')">Copy email 1</button>
+      <button class="g" onclick="copyText(${id},'Email2_Body')">Copy email 2</button>
+      <button class="g" onclick="copyText(${id},'LI_Note')">Copy LI note</button></p>
+   <div id="pvbox" class="hide"><div class="head" id="pvhead"></div><iframe id="pvframe" sandbox title="Email preview"></iframe></div>`;
   $("drawer").classList.add("open");
+  countAll();
 }
 const closeDrawer = () => $("drawer").classList.remove("open");
-const saveDrawer = guard(async id => {
+
+function drawerFields(){
   const fields = {};
   $("drawer").querySelectorAll("[data-k]").forEach(el => fields[el.dataset.k] = el.type==="checkbox" ? el.checked : el.value);
-  await api("/api/update", {id, fields}); Object.assign(FOUNDERS.find(x=>x.id===id), fields); drawContacts(); toast("saved");
+  return fields;
+}
+const saveFields = async (id, fields) => {
+  await api("/api/update", {id, fields});
+  Object.assign(FOUNDERS.find(x => x.id===id), fields);
+  drawContacts();
+};
+const saveDrawer = guard(async id => { await saveFields(id, drawerFields()); toast("saved"); });
+
+/* Work down the filtered list without going back to the table between people.
+   The next id is read before saving, because approving can drop this row out of the filter. */
+const saveNext = guard(async (id, approve) => {
+  const nxt = drawerPos(id).next;
+  const fields = drawerFields();
+  if(approve) fields.Approve = true;
+  await saveFields(id, fields);
+  if(nxt === null){ closeDrawer(); toast(approve ? "approved - that was the last one" : "saved - that was the last one"); return; }
+  toast(approve ? "approved" : "saved");
+  openDrawer(nxt);
+});
+
+const previewEmail = guard(async id => {
+  const f = drawerFields();
+  const r = await api("/api/preview_email", {id, subject:f.Email_Subject, body:f.Email_Body});
+  $("pvbox").classList.remove("hide");
+  $("pvhead").innerHTML = `<b>${esc(r.subject) || '<span class="err">no subject</span>'}</b>`
+    + ` <span class="${r.over_120_words?"err":"muted"}">${r.words} words</span>`
+    + (r.resume_url_set ? "" : ` <span class="muted">- RESUME_URL not set in .env, so {{RESUME_LINK}} reads "(CV attached)"</span>`);
+  $("pvframe").srcdoc = r.html;   /* sandboxed: no scripts, no same-origin */
 });
 const copyText = (id,k) => { navigator.clipboard.writeText(FOUNDERS.find(x=>x.id===id)[k]||""); toast("copied"); };
 

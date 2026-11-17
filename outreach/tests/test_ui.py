@@ -201,6 +201,60 @@ check("unknown job blocked", st, 400)
 st, v = call("/api/run", {"job": "gmail_dry"})
 check("run job", (st, v["ok"]), (200, True))
 
+# ---------------------------------------------------------------- email preview
+import os  # noqa: E402
+
+os.environ.pop("RESUME_URL", None)
+st, v = call("/api/preview_email", {"body": "Hi **Ayush**\n\n- 40 Cr GMV\n- 7 hires\n\nCV: {{RESUME_LINK}}",
+                                    "subject": "Founder's Office"})
+check("preview 200", st, 200)
+check("preview subject", v["subject"], "Founder's Office")
+check("preview bold", "<b>Ayush</b>" in v["html"], True)
+check("preview bullets", "<ul><li>" in v["html"], True)
+check("preview words", v["words"], 11)
+check("preview not over", v["over_120_words"], False)
+check("no resume url", "(CV attached)" in v["html"], True)
+check("resume flag off", v["resume_url_set"], False)
+
+os.environ["RESUME_URL"] = "https://example.com/cv"
+st, v = call("/api/preview_email", {"body": "CV: {{RESUME_LINK}}"})
+check("resume link used", '<a href="https://example.com/cv">my CV</a>' in v["html"], True)
+check("resume flag on", v["resume_url_set"], True)
+os.environ.pop("RESUME_URL", None)
+
+# the preview is rendered in the page, so anything typed must come back escaped
+st, v = call("/api/preview_email", {"body": "<script>alert(1)</script> & <b>x"})
+check("preview escapes html", "<script>" in v["html"], False)
+check("preview escapes ampersand", "&amp;" in v["html"], True)
+
+st, v = call("/api/preview_email", {"body": " ".join(["word"] * 130)})
+check("preview flags long email", (v["words"], v["over_120_words"]), (130, True))
+
+# falls back to the stored row when only an id is given
+DB["Founders"][0]["fields"]["Email_Body"] = "Stored **one**"
+DB["Founders"][0]["fields"]["Email2_Body"] = "Stored **two**"
+DB["Founders"][0]["fields"]["Email_Subject"] = "Stored subject"
+st, v = call("/api/preview_email", {"id": DB["Founders"][0]["id"]})
+check("preview by id", ("<b>one</b>" in v["html"], v["subject"]), (True, "Stored subject"))
+st, v = call("/api/preview_email", {"id": DB["Founders"][0]["id"], "which": "2"})
+check("preview email 2 by id", "<b>two</b>" in v["html"], True)
+
+# unsaved drawer text wins over whatever is stored
+st, v = call("/api/preview_email", {"id": DB["Founders"][0]["id"], "body": "Unsaved **edit**"})
+check("preview prefers posted body", ("<b>edit</b>" in v["html"], "one" in v["html"]), (True, False))
+
+st, v = call("/api/preview_email", {"id": 99999})
+check("preview unknown id", st, 400)
+st, v = call("/api/preview_email", {})
+check("preview needs something", st, 400)
+st, v = call("/api/preview_email", {"body": "x" * 20001})
+check("preview rejects huge body", st, 400)
+st, v = call("/api/preview_email", {"body": 42})
+check("preview rejects non-text", st, 400)
+
+st, v = call("/api/preview_email", {"body": "hi"}, ui=False)
+check("preview needs X-UI", st, 403)
+
 srv.shutdown()
 if fails:
     print("FAILED:\n" + "\n".join(fails))

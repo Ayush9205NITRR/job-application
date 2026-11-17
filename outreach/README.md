@@ -74,6 +74,15 @@ GitHub Actions has no browser, so the one-time sign-in happens locally and the r
 `credentials.json` and `token.json` are gitignored. The scope is read-only; nothing in this repo can send mail.
 
 ## Control panel (optional, local only)
+
+The Review drawer works through the filtered list one person at a time: **Save & next** and
+**Approve & next** keep you in the drawer, the header shows where you are (`4 of 37`), and the last
+one closes it. Live counters sit beside each box and turn red past the house limits (120 words for an
+email, 60 for WhatsApp, 200 characters for a LinkedIn note). Anything with a `Check_Before_Sending`
+note carries a warning pill in the table, hover for the reason, and the filter bar can show only
+those. **Preview email HTML** renders what you have typed, unsaved, through the same
+`build_email_html.py` the draft uses, in a sandboxed frame — so you can see the bold, the bullets and
+the CV link before approving. It renders only; nothing is sent.
 `python3 ui/server.py` then open http://localhost:8585
 - **Dashboard**: funnel (people -> contactable -> approved -> sent -> delivered -> viewed -> replied), due follow-ups, by vertical/stage.
 - **Upload**: pick your CSV, check the column mapping (dropdowns), Import. Optional views CSV.

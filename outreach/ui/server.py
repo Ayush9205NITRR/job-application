@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
+import build_email_html as B  # noqa: E402
 import grist_client as G  # noqa: E402
 import import_csv as I  # noqa: E402
 
@@ -109,6 +110,38 @@ def clean_update(fields):
     return fields
 
 
+MAX_BODY = 20000
+
+
+def preview_email(b):
+    """Render an email body the way the Gmail draft will look.
+
+    Takes the text as it stands in the drawer, unsaved, so formatting can be checked before
+    approving; falls back to the stored row when only an id is given. Nothing is written, and no
+    mail is touched — this only runs the same markdown-to-HTML step build_email_html.py uses.
+    """
+    which = "2" if str(b.get("which") or "1") == "2" else "1"
+    body, subject = b.get("body"), b.get("subject") or ""
+    if body is None:
+        if b.get("id") is None:
+            raise ValueError("give either body text or an id")
+        rows = [r for r in G.fetch("Founders") if r["id"] == int(b["id"])]
+        if not rows:
+            raise ValueError(f"no person with id {b['id']}")
+        f = rows[0]["fields"]
+        body = f.get("Email2_Body") if which == "2" else f.get("Email_Body")
+        subject = subject or f.get("Email_Subject") or ""
+    body = body or ""
+    if not isinstance(body, str) or not isinstance(subject, str):
+        raise ValueError("subject and body must be text")
+    if len(body) > MAX_BODY:
+        raise ValueError(f"body is {len(body)} characters; the limit is {MAX_BODY}")
+    resume = os.environ.get("RESUME_URL", "")
+    words = len([w for w in body.split() if w.strip()])
+    return {"which": which, "subject": subject, "html": B.md_to_html(body, resume),
+            "words": words, "over_120_words": words > 120, "resume_url_set": bool(resume)}
+
+
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
@@ -175,6 +208,8 @@ class H(BaseHTTPRequestHandler):
                 (ROOT / "imports").mkdir(exist_ok=True)
                 (ROOT / "imports" / name).write_text(b["text"], encoding="utf-8")
                 return self._send(200, self._run("recompute", name))
+            if path == "/api/preview_email":
+                return self._send(200, preview_email(b))
             if path == "/api/run":
                 if b.get("job") not in JOBS:
                     return self._send(400, {"error": "unknown job"})
